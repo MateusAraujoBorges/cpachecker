@@ -72,8 +72,11 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
 
   @Nonnull
   public static String prepareUniqueNameForVar(SymbolicIdentifier pValue) {
-    return pValue.getRepresentation()
-        .replace("::","_")
+    String rep = pValue.getRepresentation();
+    if (rep.charAt(0) == '_') {
+      rep = "L" + rep;
+    }
+    return rep.replace("::","_")
         .replace("/","_")
         + "_" + pValue.getId();
   }
