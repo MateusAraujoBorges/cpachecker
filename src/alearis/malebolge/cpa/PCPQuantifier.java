@@ -57,6 +57,11 @@ public class PCPQuantifier implements ConstraintQuantifier {
   @Option(description = "URI for the PCP instance to be used (e.g. 'localhost:9001')")
   private String pcpAddress = "localhost:9001";
 
+  @Option(description = "model counter to be used. defaults to barvinok")
+  private Counter counter = Counter.BARVINOK;
+
+  public enum Counter {BARVINOK, SHARPSAT}
+
   private final PCPConnectionManager pcp;
   private final ShutdownNotifier shutdownNotifier;
   private final LoadingCache<Collection<Constraint>, CountResult> cache;
@@ -138,11 +143,23 @@ public class PCPQuantifier implements ConstraintQuantifier {
     StringBuilder header = new StringBuilder();
     StringBuilder body = new StringBuilder();
 
+    String counterName;
+    switch (counter) {
+      case BARVINOK:
+        counterName = "barvinok";
+        break;
+      case SHARPSAT:
+        counterName = "sharpsat";
+        break;
+      default:
+        throw new IllegalStateException("Unexpected value: " + counter);
+    }
+
     header.append("(clear)\n");
     header.append("(set-option :non-linear-counter \"qcoral\")\n" +
         "(set-option :partitioning true)\n" +
         "(set-option :inclusion-exclusion false)\n" +
-        "(set-option :linear-counter \"barvinok\")\n");
+        "(set-option :linear-counter \"" + counterName + "\")\n");
 
     if (this.simplify) {
       header.append("(set-option :simplify \"z3\")\n");
