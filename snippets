@@ -1,0 +1,9 @@
+# generate witness
+./scripts/cpa.sh -noout -heap 10000M -predicateAnalysis -setprop cpa.composite.aggregateBasicBlocks=false -setprop cfa.simplifyCfa=false -setprop cfa.allowBranchSwapping=false -setprop cpa.predicate.ignoreIrrelevantVariables=false -setprop counterexample.export.assumptions.assumeLinearArithmetics=true -setprop counterexample.export.assumptions.includeConstantsForPointers=false -setprop counterexample.export.graphml=violation-witness.graphml -setprop counterexample.export.compressErrorWitness=false -spec PropertyUnreachCall.prp -setprop log.consoleLevel=ALL mitch.c
+
+# validate witness
+./scripts/cpa.sh -witnessValidation -witness violation-witness.graphml.gz -spec PropertyUnreachCall.prp -setprop log.consoleLevel=ALL mitch.c
+
+
+# validate witness and dump pc to output/alpaca.pc (hardcoded, need fix)
+./scripts/cpa.sh -witnessValidationWithSymex -witness output/violation-witness.graphml.gz -spec config/specification/sv-comp-reachability.spc -setprop log.consoleLevel=ALL test/svcomp18/mitch-witness.c

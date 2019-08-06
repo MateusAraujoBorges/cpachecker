@@ -23,10 +23,23 @@
  */
 package alearis.malebolge.cpa;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import javax.annotation.Nonnull;
 import org.sosy_lab.cpachecker.cfa.types.Type;
+import org.sosy_lab.cpachecker.cfa.types.c.CSimpleType;
+import org.sosy_lab.cpachecker.cpa.arg.ARGState;
+import org.sosy_lab.cpachecker.cpa.constraints.constraint.Constraint;
+import org.sosy_lab.cpachecker.cpa.constraints.domain.ConstraintsState;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.AdditionExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.AddressOfExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.BinaryAndExpression;
@@ -55,12 +68,17 @@ import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicValue;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicValueVisitor;
 import org.sosy_lab.cpachecker.cpa.value.type.NumericValue;
 import org.sosy_lab.cpachecker.cpa.value.type.Value;
+import org.sosy_lab.cpachecker.util.AbstractStates;
 
 public class PCPVisitor implements SymbolicValueVisitor<String> {
 
-  private final Set<SymbolicIdentifier> vars = new HashSet<>();
+  private final Map<SymbolicIdentifier, Type> vars = new HashMap<>();
 
-  public Set<SymbolicIdentifier> getVars() {
+  public Set<SymbolicIdentifier> getVarSet() {
+    return vars.keySet();
+  }
+
+  public Map<SymbolicIdentifier, Type> getVars() {
     return vars;
   }
 
@@ -74,11 +92,11 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
   public static String prepareUniqueNameForVar(SymbolicIdentifier pValue) {
     String rep = pValue.getRepresentation();
     if (rep.charAt(0) == '_') {
-      rep = "L" + rep;
+      rep = "@" + rep;
     }
-    return rep.replace("::","_")
-        .replace("/","_")
-        + "_" + pValue.getId();
+    return rep.replace("::","@")
+        //.replace("/","@")
+        + "~" + pValue.getId();
   }
 
   @Override
@@ -87,7 +105,7 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
     Type t = pExpression.getType();
 
     if (v instanceof SymbolicIdentifier) {
-      vars.add((SymbolicIdentifier) v);
+      vars.put((SymbolicIdentifier) v, t);
       return prepareUniqueNameForVar((SymbolicIdentifier) v);
     } else if (v instanceof SymbolicValue) {
       return ((SymbolicValue) v).accept(this);
@@ -210,5 +228,36 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
   @Override
   public String visit(NegationExpression pExpression) {
     return "(not " + pExpression.getOperand().accept(this) + ")";
+  }
+
+  public static void dumpPcForAlpaca(ARGState pLastState) throws IOException {
+    ConstraintsState cstate = AbstractStates.extractStateByType(pLastState, ConstraintsState.class);
+    StringBuilder sb = new StringBuilder();
+    PCPVisitor visitor = new PCPVisitor();
+    if (cstate.size() > 1) {
+      sb.append("(and ");
+    }
+    for (Constraint c : cstate) {
+      sb.append(c.accept(visitor));
+      sb.append(" ");
+    }
+    if (cstate.size() > 1) {
+      sb.append(")");
+    }
+    sb.append("\n");
+    visitor.getVars().forEach((var, type) -> {
+      sb.append(prepareUniqueNameForVar(var));
+      sb.append(" -> ");
+      if (type instanceof CSimpleType) {
+        CSimpleType ctype = (CSimpleType) type;
+        sb.append(ctype.toASTString(""));
+      }
+      sb.append("\n");
+    });
+
+    Path output = Files.write(Paths.get("output", "alpaca.pc"),
+        Collections.singletonList(sb.toString()), StandardOpenOption.CREATE,
+        StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
+    System.out.println("[alpaca-writer] pc written to: " + output);
   }
 }

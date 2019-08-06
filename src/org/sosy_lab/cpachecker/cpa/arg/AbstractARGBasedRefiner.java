@@ -25,9 +25,11 @@ package org.sosy_lab.cpachecker.cpa.arg;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
+import alearis.malebolge.cpa.PCPVisitor;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Iterables;
 import com.google.errorprone.annotations.ForOverride;
+import java.io.IOException;
 import java.util.Collection;
 import java.util.logging.Level;
 import org.checkerframework.checker.nullness.qual.Nullable;
@@ -41,6 +43,7 @@ import org.sosy_lab.cpachecker.core.interfaces.Statistics;
 import org.sosy_lab.cpachecker.core.interfaces.StatisticsProvider;
 import org.sosy_lab.cpachecker.core.reachedset.ReachedSet;
 import org.sosy_lab.cpachecker.cpa.arg.path.ARGPath;
+import org.sosy_lab.cpachecker.cpa.constraints.ConstraintsCPA;
 import org.sosy_lab.cpachecker.exceptions.CPAException;
 import org.sosy_lab.cpachecker.exceptions.CPATransferException;
 import org.sosy_lab.cpachecker.exceptions.RefinementFailedException;
@@ -144,6 +147,15 @@ public class AbstractARGBasedRefiner implements Refiner, StatisticsProvider {
 
       // Print error trace if cpa.arg.printErrorPath = true
       argCpa.getARGExporter().exportCounterexampleOnTheFly(lastElement, counterexample);
+
+      //FIXME: temporary hack to dump current path condtion
+      if (CPAs.retrieveCPA(argCpa, ConstraintsCPA.class) != null) {
+        try {
+          PCPVisitor.dumpPcForAlpaca(path.getLastState());
+        } catch (IOException e) {
+          throw new CPAException("yep, it failed",e);
+        }
+      }
     }
 
     logger.log(Level.FINEST, "ARG based refinement finished, result is", counterexample.isSpurious());

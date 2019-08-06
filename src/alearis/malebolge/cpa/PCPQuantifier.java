@@ -172,7 +172,7 @@ public class PCPQuantifier implements ConstraintQuantifier {
     }
     body.append("(count)\n");
 
-    for (SymbolicIdentifier var : translator.getVars()) {
+    for (SymbolicIdentifier var : translator.getVarSet()) {
       //TODO SymbolicIdentifiers do not have any type information.
       // Gonna assume that everything is an int for now.
 
