@@ -114,7 +114,7 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
 
         if (depth >= depthLimit) {
           pstate.setType(Type.GREY);
-          successors = Collections.EMPTY_LIST;
+          successors = Collections.emptyList();
         } else {
           successors = this.transferRelation.
               getAbstractSuccessors(pstate.getWrappedState(), precision);
@@ -145,7 +145,7 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
 
         if (depth >= depthLimit) {
           pstate.setType(Type.GREY);
-          successors = Collections.EMPTY_LIST;
+          successors = Collections.emptyList();
         } else {
           successors = this.transferRelation
               .getAbstractSuccessorsForEdge(pstate.getWrappedState(), precision, cfaEdge);
