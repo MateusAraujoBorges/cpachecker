@@ -30,6 +30,8 @@ import static org.sosy_lab.cpachecker.util.AbstractStates.extractLocations;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.FluentIterable;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import java.util.ArrayDeque;
@@ -280,7 +282,7 @@ public abstract class PathTranslator {
         newFunction.write("label_" + elemId + ": ;");
 
       } else {
-        return Collections.emptySet();
+        return ImmutableSet.of();
       }
     }
 
@@ -341,7 +343,7 @@ public abstract class PathTranslator {
       }
       return result;
     }
-    return Collections.emptyList();
+    return ImmutableList.of();
   }
 
   private List<ARGState> chooseIfArbitrary(ARGState parent, List<ARGState> pRelevantChildrenOfElement) {

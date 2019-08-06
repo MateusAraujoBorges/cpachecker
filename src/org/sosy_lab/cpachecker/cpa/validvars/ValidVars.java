@@ -31,12 +31,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import java.io.Serializable;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.sosy_lab.cpachecker.exceptions.CPAException;
-
 
 public class ValidVars implements Serializable {
 
@@ -46,8 +44,8 @@ public class ValidVars implements Serializable {
   private final ImmutableMap<String, Set<String>> localValidVars;
   private final ImmutableMap<String,Byte> numFunctionCalled;
 
-  public static final ValidVars initial = new ValidVars(Collections.<String> emptySet(),
-      Collections.<String, Set<String>> emptyMap(), Collections.<String, Byte> emptyMap());
+  public static final ValidVars initial =
+      new ValidVars(ImmutableSet.of(), ImmutableMap.of(), ImmutableMap.of());
 
   ValidVars(Set<String> pGlobalValidVars, Map<String, ? extends Set<String>> pLocal, Map<String,Byte> pNumFunctionCalled) {
     globalValidVars = ImmutableSet.copyOf(pGlobalValidVars);

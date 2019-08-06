@@ -23,6 +23,9 @@
  */
 package org.sosy_lab.cpachecker.util.ci;
 
+import static com.google.common.truth.Truth.assert_;
+
+import com.google.common.collect.ImmutableList;
 import com.google.common.truth.Truth;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -36,7 +39,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.sosy_lab.common.ShutdownNotifier;
@@ -103,10 +105,10 @@ public class CustomInstructionTest {
         new AppliedCustomInstruction(
             startNode,
             endNodes,
-            Collections.emptyList(),
-            Collections.emptyList(),
-            Collections.emptyList(),
-            Pair.of(Collections.emptyList(), ""),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            ImmutableList.of(),
+            Pair.of(ImmutableList.of(), ""),
             SSAMap.emptySSAMap());
 
     cis.put(startNode, aci);
@@ -128,7 +130,7 @@ public class CustomInstructionTest {
     Truth.assertThat(aci.isStartState(notStart)).isFalse();
     try {
       aci.isStartState(noLocation);
-      Assert.fail();
+      assert_().fail();
     } catch (CPAException e) {
     }
 
@@ -137,7 +139,7 @@ public class CustomInstructionTest {
     Truth.assertThat(cia.isStartState(notStart)).isFalse();
     try {
       cia.isStartState(noLocation);
-      Assert.fail();
+      assert_().fail();
     } catch (CPAException e) {
     }
   }
@@ -151,7 +153,7 @@ public class CustomInstructionTest {
     Truth.assertThat(aci.isEndState(start)).isFalse();
     try {
       aci.isEndState(noLocation);
-      Assert.fail();
+      assert_().fail();
     } catch (CPAException e) {
     }
 
@@ -169,7 +171,7 @@ public class CustomInstructionTest {
     // test if input parameter not a start state
     try {
       cia.getAppliedCustomInstructionFor(end);
-      Assert.fail();
+      assert_().fail();
     } catch (CPAException e) {
       Truth.assertThat(e)
           .hasMessageThat()
@@ -178,7 +180,7 @@ public class CustomInstructionTest {
     // test if input parameter does not contain location state
     try {
       cia.getAppliedCustomInstructionFor(new ARGState(new CallstackState(null, "main", startNode), null));
-      Assert.fail();
+      assert_().fail();
     } catch (CPAException e) {
     }
   }
@@ -187,11 +189,7 @@ public class CustomInstructionTest {
   public void testGetSignature() {
     ci =
         new CustomInstruction(
-            null,
-            null,
-            Collections.emptyList(),
-            Collections.emptyList(),
-            ShutdownNotifier.createDummy());
+            null, null, ImmutableList.of(), ImmutableList.of(), ShutdownNotifier.createDummy());
     Truth.assertThat(ci.getSignature()).isEqualTo("() -> ()");
 
     List<String> inputVars = new ArrayList<>();
@@ -216,11 +214,7 @@ public class CustomInstructionTest {
   public void testGetFakeSMTDescription() {
     ci =
         new CustomInstruction(
-            null,
-            null,
-            Collections.emptyList(),
-            Collections.emptyList(),
-            ShutdownNotifier.createDummy());
+            null, null, ImmutableList.of(), ImmutableList.of(), ShutdownNotifier.createDummy());
     Pair<List<String>, String> pair = ci.getFakeSMTDescription();
     Truth.assertThat(pair.getFirst()).isEmpty();
     Truth.assertThat(pair.getSecond()).isEqualTo("(define-fun ci() Bool true)");
@@ -229,7 +223,7 @@ public class CustomInstructionTest {
     inputVars.add("var");
     ci =
         new CustomInstruction(
-            null, null, inputVars, Collections.emptyList(), ShutdownNotifier.createDummy());
+            null, null, inputVars, ImmutableList.of(), ShutdownNotifier.createDummy());
     pair = ci.getFakeSMTDescription();
     Truth.assertThat(pair.getFirst()).hasSize(1);
     Truth.assertThat(pair.getFirst().get(0)).isEqualTo("(declare-fun var () Int)");
@@ -239,7 +233,7 @@ public class CustomInstructionTest {
     outputVars.add("var1");
     ci =
         new CustomInstruction(
-            null, null, Collections.emptyList(), outputVars, ShutdownNotifier.createDummy());
+            null, null, ImmutableList.of(), outputVars, ShutdownNotifier.createDummy());
     pair = ci.getFakeSMTDescription();
     Truth.assertThat(pair.getFirst()).hasSize(1);
     Truth.assertThat(pair.getFirst().get(0)).isEqualTo("(declare-fun var1@1 () Int)");
@@ -398,9 +392,9 @@ public class CustomInstructionTest {
             startNode,
             endNodes,
             inputVariables,
-            Collections.emptyList(),
+            ImmutableList.of(),
             inputVariables,
-            Pair.of(Collections.emptyList(), ""),
+            Pair.of(ImmutableList.of(), ""),
             SSAMap.emptySSAMap());
     Truth.assertThat(aci.getInputVariables()).containsExactly("main::a");
   }
@@ -415,10 +409,10 @@ public class CustomInstructionTest {
         new AppliedCustomInstruction(
             startNode,
             endNodes,
-            Collections.emptyList(),
+            ImmutableList.of(),
             outputVariables,
-            Collections.emptyList(),
-            Pair.of(Collections.emptyList(), ""),
+            ImmutableList.of(),
+            Pair.of(ImmutableList.of(), ""),
             SSAMap.emptySSAMap());
     Truth.assertThat(aci.getOutputVariables()).containsExactly("main::a");
   }
@@ -435,9 +429,9 @@ public class CustomInstructionTest {
             startNode,
             endNodes,
             Collections.singletonList("main::a"),
-            Collections.emptyList(),
+            ImmutableList.of(),
             inputVarsAndConstants,
-            Pair.of(Collections.emptyList(), ""),
+            Pair.of(ImmutableList.of(), ""),
             SSAMap.emptySSAMap());
     Truth.assertThat(aci.getInputVariablesAndConstants()).containsExactlyElementsIn(inputVarsAndConstants).inOrder();
   }

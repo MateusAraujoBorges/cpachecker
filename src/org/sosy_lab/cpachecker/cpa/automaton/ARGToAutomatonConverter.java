@@ -32,6 +32,7 @@ import com.google.common.base.Predicates;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
@@ -213,7 +214,7 @@ public class ARGToAutomatonConverter {
     Preconditions.checkArgument(!ignoreState.apply(root));
     Preconditions.checkArgument(!root.isCovered());
 
-    Map<String, AutomatonVariable> variables = Collections.emptyMap();
+    Map<String, AutomatonVariable> variables = ImmutableMap.of();
 
     Deque<ARGState> waitlist = new ArrayDeque<>();
     Collection<ARGState> finished = new HashSet<>();
@@ -248,9 +249,7 @@ public class ARGToAutomatonConverter {
         } else {
           id = id(child);
         }
-        transitions.add(
-            new AutomatonTransition(
-                locationQuery, ImmutableList.of(), ImmutableList.of(), ImmutableList.of(), id));
+        transitions.add(new AutomatonTransition.Builder(locationQuery, id).build());
         waitlist.add(child);
       }
 
@@ -259,11 +258,9 @@ public class ARGToAutomatonConverter {
         assert states.contains(AutomatonInternalState.ERROR);
       } else {
         transitions.add(
-            new AutomatonTransition(
+            new AutomatonTransition.Builder(
                 buildOtherwise(locationQueries),
-                ImmutableList.of(),
-                ImmutableList.of(),
-                AutomatonInternalState.BOTTOM));
+                AutomatonInternalState.BOTTOM).build());
 
         boolean hasSeveralChildren = transitions.size() > 1;
         states.add(
@@ -338,7 +335,7 @@ public class ARGToAutomatonConverter {
 
     switch (export) {
       case NONE:
-        return Collections.emptyList();
+        return ImmutableList.of();
 
       case ALL: // export all nodes, mainly for debugging.
         return from(pDependencies.entrySet())
@@ -903,7 +900,7 @@ public class ARGToAutomatonConverter {
     }
 
     finishAssumptionHandling(states, callstackToLeaves, stacksWithAssumptions);
-    return new Automaton("ARG", Collections.emptyMap(), states, id(root));
+    return new Automaton("ARG", ImmutableMap.of(), states, id(root));
   }
 
   private static void finishAssumptionHandling(
@@ -962,12 +959,9 @@ public class ARGToAutomatonConverter {
   private static AutomatonTransition makeLocationTransition(
       int nodeNumber, String followStateName, Collection<AExpression> assumptions, boolean negate) {
     AutomatonBoolExpr expr = new AutomatonBoolExpr.CPAQuery("location", "nodenumber==" + nodeNumber);
-    return new AutomatonTransition(
+    return new AutomatonTransition.Builder(
         negate ? new AutomatonBoolExpr.Negation(expr) : expr,
-        ImmutableList.of(),
-        ImmutableList.copyOf(assumptions),
-        ImmutableList.of(),
-        followStateName);
+        followStateName).withAssumptions(ImmutableList.copyOf(assumptions)).build();
   }
 
   private CExpression negateExpression(CExpression expr) {

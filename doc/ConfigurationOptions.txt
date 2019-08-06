@@ -1007,6 +1007,10 @@ cpa.arg.automaton.splitStrategy = TARGETS
 # compress the produced correctness-witness automata using GZIP compression.
 cpa.arg.compressWitness = true
 
+# prevent the stop-operator from aborting the stop-check early when it
+# crosses a target state
+cpa.arg.coverTargetStates = false
+
 # inform merge operator in CPA enabled analysis that it should delete the
 # subgraph of the merged node which is required to get at most one successor
 # per CFA edge.
@@ -1406,6 +1410,15 @@ cpa.constraints.satCheckStrategy = AT_ASSUME
 # Try model of predecessor constraints state before running SMT solver
 cpa.constraints.useLastModel = true
 
+# Set number of refinements for the trace abstraction algorithm
+cpa.dca.refiner.maxRefinementIterations = 0
+
+# Allows to abort the analysis early in order to only produce the ARG
+cpa.dca.refiner.skipAnalysis = false
+
+# Abort the refinement of finite prefixes for the purpose of better debugging
+cpa.dca.refiner.skipFiniteRefinement = false
+
 # which merge operator to use for DefUseCPA
 cpa.defuse.merge = "sep"
   allowed values: [sep, join]
@@ -1531,7 +1544,7 @@ cpa.local.allocatefunctions = {}
 cpa.local.conservativefunctions = {}
 
 # variables, which are always local
-cpa.local.localvariables = Collections.emptySet()
+cpa.local.localvariables = {}
 
 # With this option enabled, function calls that occur in the CFA are
 # followed. By disabling this option one can traverse a function without
@@ -1768,6 +1781,9 @@ cpa.predicate.abstractions.file = "abstractions.txt"
 # 'MIN<=X<=MAX', where MIN and MAX are computed from the type of the method
 # (signature, not name!).
 cpa.predicate.addRangeConstraintsForNondet = false
+
+# Check satisfiability for plain conjunction of edge and assumptions.
+cpa.predicate.assumptionStrengtheningSatCheck = false
 
 # Enable/disable abstraction reduction at the BAM block entry
 cpa.predicate.bam.useAbstractionReduction = true
@@ -2842,6 +2858,10 @@ cpa.value.refinement.avoidSimilarRepeatedRefinement = false
 cpa.value.refinement.basisStrategy = SUBGRAPH
   enum:     [ALL, SUBGRAPH, TARGET, CUTPOINT]
 
+# completely disable the tracking of found error paths in the refiner, i.e.,
+# disable the detection of repeated counterexamples
+cpa.value.refinement.disableErrorPathTracking = false
+
 # whether or not to do lazy-abstraction
 cpa.value.refinement.doLazyAbstraction = true
 
@@ -3440,10 +3460,6 @@ pdr.abstractionStrategy = NO_ABSTRACTION
 pdr.conditionAdjustmentCriterion = NEVER
   enum:     [NEVER, ALWAYS]
 
-# Try to shorten the lifted state further by checking if the lifting query is
-# still valid after dropping each literal in turn.
-pdr.dropLiteralsBeyondUnsatCoreAfterLifting = false
-
 # Which strategy to use to perform invariant refinement on successful proof
 # results.
 pdr.invariantRefinementStrategy = NO_STRENGTHENING
@@ -3456,14 +3472,6 @@ pdr.liftingAbstractionFailureThreshold = 0
 # Which strategy to use to abstract counterexamples to inductivity.
 pdr.liftingStrategy = NO_LIFTING
   enum:     [NO_LIFTING, UNSAT_CORE_BASED_LIFTING, ABSTRACTION_BASED_LIFTING]
-
-# The maximum number of attempts at dropping literals during the inductive
-# generalization of states.
-pdr.maxAttemptsToDropLiteralsDuringGeneralization = 10
-
-# The maximum number of literals that should be dropped during the inductive
-# generalization of states.
-pdr.maxLiteralsToDropDuringGeneralization = 5
 
 # Maximum number of accepted spurious transitions within a proof-obligation
 # trace before a consecution abstraction failure triggers a refinement.

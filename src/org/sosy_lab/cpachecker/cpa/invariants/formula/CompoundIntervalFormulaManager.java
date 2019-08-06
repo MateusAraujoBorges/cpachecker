@@ -24,6 +24,8 @@
 package org.sosy_lab.cpachecker.cpa.invariants.formula;
 
 import com.google.common.collect.FluentIterable;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -47,7 +49,8 @@ import org.sosy_lab.cpachecker.util.states.MemoryLocation;
 
 public class CompoundIntervalFormulaManager {
 
-  private static final Map<MemoryLocation, NumeralFormula<CompoundInterval>> EMPTY_ENVIRONMENT = Collections.emptyMap();
+  private static final ImmutableMap<MemoryLocation, NumeralFormula<CompoundInterval>>
+      EMPTY_ENVIRONMENT = ImmutableMap.of();
 
   private static final CollectVarsVisitor<CompoundInterval> COLLECT_VARS_VISITOR = new CollectVarsVisitor<>();
 
@@ -227,7 +230,7 @@ public class CompoundIntervalFormulaManager {
 
   public boolean definitelyImplies(final Map<MemoryLocation, NumeralFormula<CompoundInterval>> pCompleteEnvironment,
       final BooleanFormula<CompoundInterval> pFormula) {
-    return definitelyImplies(Collections.<BooleanFormula<CompoundInterval>>emptyList(), pCompleteEnvironment, pFormula, false);
+    return definitelyImplies(ImmutableList.of(), pCompleteEnvironment, pFormula, false);
   }
 
   public boolean definitelyImplies(

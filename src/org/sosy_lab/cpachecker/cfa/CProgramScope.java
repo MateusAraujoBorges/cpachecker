@@ -33,7 +33,9 @@ import com.google.common.base.Predicates;
 import com.google.common.base.Splitter;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableListMultimap;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
@@ -116,7 +118,7 @@ public class CProgramScope implements Scope {
                       .filter(CSimpleDeclaration.class);
                 }
 
-                return Collections.emptySet();
+                return ImmutableSet.of();
               });
 
   private static final Predicate<CSimpleDeclaration> HAS_NAME = pDeclaration -> {
@@ -212,13 +214,13 @@ public class CProgramScope implements Scope {
    * Returns an empty program scope.
    */
   private CProgramScope() {
-    variableNames = Collections.emptySet();
+    variableNames = ImmutableSet.of();
     qualifiedDeclarations = ImmutableListMultimap.of();
     simpleDeclarations = ImmutableListMultimap.of();
     functionDeclarations = ImmutableListMultimap.of();
-    qualifiedTypes = Collections.emptyMap();
-    qualifiedTypeDefs = Collections.emptyMap();
-    retValDeclarations = Collections.emptyMap();
+    qualifiedTypes = ImmutableMap.of();
+    qualifiedTypeDefs = ImmutableMap.of();
+    retValDeclarations = ImmutableMap.of();
     uses = ImmutableMultimap.of();
     functionName = null;
     locationDescriptor = Predicates.alwaysTrue();
@@ -329,7 +331,7 @@ public class CProgramScope implements Scope {
     lookups.add(() -> qualifiedDeclarations.get(pName));
     lookups.add(() -> simpleDeclarations.get(pName));
 
-    Set<CSimpleDeclaration> results = Collections.emptySet();
+    Set<CSimpleDeclaration> results = ImmutableSet.of();
 
     Iterable<Supplier<Iterable<CSimpleDeclaration>>> filteredAndUnfiltered =
         Iterables.concat(

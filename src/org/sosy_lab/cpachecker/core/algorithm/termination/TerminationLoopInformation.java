@@ -34,7 +34,7 @@ import static org.sosy_lab.cpachecker.util.CFAUtils.leavingEdges;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import java.util.Collections;
+import com.google.common.collect.ImmutableSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -93,34 +93,31 @@ public class TerminationLoopInformation {
   private Optional<Loop> loop = Optional.empty();
 
   /**
-   * All locations after an outgoing edge of the loop currently processed or an empty set.
-   * Needs to be set before modifying the {@link CFA}!
+   * All locations after an outgoing edge of the loop currently processed or an empty set. Needs to
+   * be set before modifying the {@link CFA}!
    *
    * @see Loop#getOutgoingEdges()
    */
-  private Set<CFANode> loopLeavingLocations = Collections.emptySet();
+  private Set<CFANode> loopLeavingLocations = ImmutableSet.of();
 
   /**
-   * All outgoing edges of the loop currently processed or an empty set.
-   * Needs to be set before modifying the {@link CFA}!
+   * All outgoing edges of the loop currently processed or an empty set. Needs to be set before
+   * modifying the {@link CFA}!
    *
    * @see Loop#getOutgoingEdges()
    */
-  private Set<CFAEdge> loopLeavingEdges = Collections.emptySet();
+  private Set<CFAEdge> loopLeavingEdges = ImmutableSet.of();
 
   /**
    * The current ranking relation.
    */
   private Optional<RankingRelation> rankingRelation = Optional.empty();
 
-  /**
-   * Mapping of relevant variables to the corresponding primed variable.
-   */
-  private Map<CExpression, CVariableDeclaration> relevantVariables = Collections.emptyMap();
+  /** Mapping of relevant variables to the corresponding primed variable. */
+  private Map<CExpression, CVariableDeclaration> relevantVariables = ImmutableMap.of();
 
   // reusing of intermediate location is required to build counter examples
-  private List<CFANode> relevantVariablesInitializationIntermediateLocations =
-      Collections.emptyList();
+  private List<CFANode> relevantVariablesInitializationIntermediateLocations = ImmutableList.of();
 
   private Set<CFAEdge> createdCfaEdges = new LinkedHashSet<>();
 
@@ -232,10 +229,10 @@ public class TerminationLoopInformation {
    */
   void reset() {
     loop = Optional.empty();
-    loopLeavingLocations = Collections.emptySet();
-    loopLeavingEdges = Collections.emptySet();
-    relevantVariables = Collections.emptyMap();
-    relevantVariablesInitializationIntermediateLocations = Collections.emptyList();
+    loopLeavingLocations = ImmutableSet.of();
+    loopLeavingEdges = ImmutableSet.of();
+    relevantVariables = ImmutableMap.of();
+    relevantVariablesInitializationIntermediateLocations = ImmutableList.of();
     targetNode = Optional.empty();
     resetCfa();
   }

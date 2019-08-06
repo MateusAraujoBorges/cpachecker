@@ -695,7 +695,7 @@ public class SMGTransferRelation
               "Calling '"
                   + calledFunctionName
                   + "' and not using the result, resulting in memory leak.",
-              Collections.emptyList());
+              ImmutableList.of());
         }
         return newStates;
       }
@@ -1195,8 +1195,12 @@ public class SMGTransferRelation
   }
 
   @Override
-  public Collection<? extends AbstractState> strengthen(AbstractState element, List<AbstractState> elements,
-      CFAEdge cfaEdge, Precision pPrecision) throws CPATransferException, InterruptedException {
+  public Collection<? extends AbstractState> strengthen(
+      AbstractState element,
+      Iterable<AbstractState> elements,
+      CFAEdge cfaEdge,
+      Precision pPrecision)
+      throws CPATransferException, InterruptedException {
 
     ArrayList<SMGState> toStrengthen = new ArrayList<>();
     ArrayList<SMGState> result = new ArrayList<>();
@@ -1252,7 +1256,7 @@ public class SMGTransferRelation
     }
 
     if (newElement == null) {
-      return Collections.emptyList();
+      return ImmutableList.of();
     } else {
       SMGUtils.plotWhenConfigured(getDotExportFileName(newElement), newElement, assumeDesc.toString(), logger, SMGExportLevel.EVERY, exportSMGOptions);
       return Collections.singleton(newElement);

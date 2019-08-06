@@ -22,6 +22,7 @@ configuration-checks:jdk-8:
   dependencies:
     - build-dependencies
     - build:jdk-8
+  image: ${CI_REGISTRY_IMAGE}/test:jdk-8
 
 configuration-checks:jdk-11:
   <<: *configuration-checks
@@ -29,10 +30,6 @@ configuration-checks:jdk-11:
     - build-dependencies
     - build:jdk-11
   image: ${CI_REGISTRY_IMAGE}/test:jdk-11
-  before_script:
-    # OptiMathSAT causes segfaults, remove it so tests with it are disabled:
-    # https://github.com/sosy-lab/java-smt/issues/132
-    - "rm lib/java/runtime/liboptimathsat5j.so"
 
 configuration-checks:jdk-12:
   <<: *configuration-checks
@@ -40,10 +37,6 @@ configuration-checks:jdk-12:
     - build-dependencies
     - build:jdk-12
   image: ${CI_REGISTRY_IMAGE}/test:jdk-12
-  before_script:
-    # OptiMathSAT causes segfaults, remove it so tests with it are disabled:
-    # https://github.com/sosy-lab/java-smt/issues/132
-    - "rm lib/java/runtime/liboptimathsat5j.so"
 
 
 configuration-documentation:
@@ -54,7 +47,7 @@ configuration-documentation:
     - "diff doc/ConfigurationOptions.txt.old doc/ConfigurationOptions.txt"
   dependencies:
     - build-dependencies
-    - build:jdk-8
+    - build:jdk-11
 
 
 configuration-plot:
@@ -79,6 +72,7 @@ python-unit-tests:jdk-8:
   dependencies:
     - build-dependencies
     - build:jdk-8
+  image: ${CI_REGISTRY_IMAGE}/test:jdk-8
 
 python-unit-tests:jdk-11:
   <<: *python-unit-tests
@@ -123,7 +117,7 @@ javascript-e2e-tests:
   stage: checks
   dependencies:
     - build-dependencies
-    - build:jdk-8
+    - build:jdk-11
   image: ${CI_REGISTRY_IMAGE}/test:java-node
   before_script:
       # generate example report

@@ -74,6 +74,7 @@ import org.sosy_lab.cpachecker.cfa.model.CFANode;
 import org.sosy_lab.cpachecker.core.CPAcheckerResult.Result;
 import org.sosy_lab.cpachecker.core.CoreComponentsFactory;
 import org.sosy_lab.cpachecker.core.Specification;
+import org.sosy_lab.cpachecker.core.defaults.precision.ConfigurablePrecision;
 import org.sosy_lab.cpachecker.core.defaults.precision.VariableTrackingPrecision;
 import org.sosy_lab.cpachecker.core.interfaces.AbstractState;
 import org.sosy_lab.cpachecker.core.interfaces.ConfigurableProgramAnalysis;
@@ -86,6 +87,9 @@ import org.sosy_lab.cpachecker.core.reachedset.ForwardingReachedSet;
 import org.sosy_lab.cpachecker.core.reachedset.HistoryForwardingReachedSet;
 import org.sosy_lab.cpachecker.core.reachedset.ReachedSet;
 import org.sosy_lab.cpachecker.core.reachedset.UnmodifiableReachedSet;
+import org.sosy_lab.cpachecker.cpa.constraints.refiner.precision.ConstraintsPrecision;
+import org.sosy_lab.cpachecker.cpa.constraints.refiner.precision.FullConstraintsPrecision;
+import org.sosy_lab.cpachecker.cpa.constraints.refiner.precision.RefinableConstraintsPrecision;
 import org.sosy_lab.cpachecker.cpa.loopbound.LoopBoundPrecision;
 import org.sosy_lab.cpachecker.cpa.predicate.PredicateCPA;
 import org.sosy_lab.cpachecker.cpa.predicate.PredicatePrecision;
@@ -195,7 +199,10 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
       NOREUSE,
       REUSEOWNPRECISION,
       REUSEPREDPRECISION,
-      REUSEOWNANDPREDPRECISION;
+      REUSEOWNANDPREDPRECISION,
+      REUSECPA_OWNPRECISION,
+      REUSECPA_PREDPRECISION,
+      REUSECPA_OWNANDPREDPRECISION;
     }
 
     private final Path configFile;
@@ -253,13 +260,22 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
           return REPETITIONMODE.REUSEPREDPRECISION;
         case "reuse-precisions":
           return REPETITIONMODE.REUSEOWNANDPREDPRECISION;
+        case "reuse-cpa-own-precision":
+          return REPETITIONMODE.REUSECPA_OWNPRECISION;
+        case "reuse-cpa-pred-precision":
+          return REPETITIONMODE.REUSECPA_PREDPRECISION;
+        case "reuse-cpa-precisions":
+          return REPETITIONMODE.REUSECPA_OWNANDPREDPRECISION;
         default:
           return REPETITIONMODE.NOREUSE;
       }
     }
 
     private boolean reuseCPA() {
-      return mode == REPETITIONMODE.CONTINUE || reusePrecision();
+      return mode == REPETITIONMODE.CONTINUE
+          || mode == REPETITIONMODE.REUSECPA_OWNPRECISION
+          || mode == REPETITIONMODE.REUSECPA_PREDPRECISION
+          || mode == REPETITIONMODE.REUSECPA_OWNANDPREDPRECISION;
     }
 
     private boolean reusePrecision() {
@@ -268,12 +284,16 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
 
     private boolean reuseOwnPrecision() {
       return mode == REPETITIONMODE.REUSEOWNPRECISION
-          || mode == REPETITIONMODE.REUSEOWNANDPREDPRECISION;
+          || mode == REPETITIONMODE.REUSEOWNANDPREDPRECISION
+          || mode == REPETITIONMODE.REUSECPA_OWNPRECISION
+          || mode == REPETITIONMODE.REUSECPA_OWNANDPREDPRECISION;
     }
 
     private boolean reusePredecessorPrecision() {
       return mode == REPETITIONMODE.REUSEPREDPRECISION
-          || mode == REPETITIONMODE.REUSEOWNANDPREDPRECISION;
+          || mode == REPETITIONMODE.REUSEOWNANDPREDPRECISION
+          || mode == REPETITIONMODE.REUSECPA_PREDPRECISION
+          || mode == REPETITIONMODE.REUSECPA_OWNANDPREDPRECISION;
     }
   }
 
@@ -547,10 +567,10 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
                       System.out, Result.UNKNOWN, currentContext.reached);
                   break;
                 case EXECUTE:
+                  @SuppressWarnings("checkstyle:IllegalInstantiation") // ok for statistics
+                  final PrintStream dummyStream = new PrintStream(ByteStreams.nullOutputStream());
                   stats.printIntermediateStatistics(
-                      new PrintStream(ByteStreams.nullOutputStream()),
-                      Result.UNKNOWN,
-                      currentContext.reached);
+                      dummyStream, Result.UNKNOWN, currentContext.reached);
                   break;
                 default: // do nothing
               }
@@ -671,6 +691,8 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
             pCurrentContext.localShutdownManager.getNotifier(),
             aggregateReached);
 
+    boolean newReachedSet = false;
+
     if (pCurrentContext.reuseCPA()) {
       if (pCurrentContext.cpa == null) {
         // create cpa only once when not initialized, use global limits (i.e. shutdownNotifier)
@@ -680,43 +702,57 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
         pCurrentContext.cpa = globalCoreComponents.createCPA(cfa, specification);
         if (!pCurrentContext.reusePrecision()) {
           // create reached set only once, continue analysis
-          pCurrentContext.reached =
-              createInitialReachedSet(
-                  pCurrentContext.cpa, pMainFunction, globalCoreComponents, null, null);
+          newReachedSet = true;
         }
       }
-      if (pCurrentContext.reusePrecision()) {
-        // start with new reached set each time, but precision from previous analysis if possible
-        List<ReachedSet> previousResults = new ArrayList<>(2);
-        FormulaManagerView fmgr = null;
 
-        if (pCurrentContext.reuseOwnPrecision()) {
-          previousResults.add(pCurrentContext.reached);
-        }
-        if (pCurrentContext.reusePredecessorPrecision() && pPreviousContext != null) {
-          previousResults.add(pPreviousContext.reached);
-          PredicateCPA predCPA = CPAs.retrieveCPA(pPreviousContext.cpa, PredicateCPA.class);
-          if (predCPA != null) {
-            fmgr = predCPA.getSolver().getFormulaManager();
-          }
-          // TODO add to previousResults, set fmgr
-        }
-
-        pCurrentContext.reached =
-            createInitialReachedSet(
-                pCurrentContext.cpa, pMainFunction, localCoreComponents, previousResults, fmgr);
-      }
     } else {
       // do not reuse cpa, and, thus reached set
       try {
         pCurrentContext.cpa = localCoreComponents.createCPA(cfa, specification);
+        newReachedSet = true;
       } catch (InvalidConfigurationException e) {
         pCurrentContext.cpa = null;
         throw e;
       }
+    }
+
+    if (pCurrentContext.reusePrecision()) {
+      // start with new reached set each time, but precision from previous analysis if possible
+      List<ReachedSet> previousResults = new ArrayList<>(2);
+      FormulaManagerView fmgr = null;
+
+      if (pCurrentContext.reuseOwnPrecision()) {
+        previousResults.add(pCurrentContext.reached);
+      }
+
+      if (pCurrentContext.reusePredecessorPrecision() && pPreviousContext != null) {
+        previousResults.add(pPreviousContext.reached);
+        PredicateCPA predCPA = CPAs.retrieveCPA(pPreviousContext.cpa, PredicateCPA.class);
+        if (predCPA != null) {
+          fmgr = predCPA.getSolver().getFormulaManager();
+        }
+      }
+
       pCurrentContext.reached =
           createInitialReachedSet(
-              pCurrentContext.cpa, pMainFunction, localCoreComponents, null, null);
+              pCurrentContext.cpa,
+              pMainFunction,
+              localCoreComponents,
+              previousResults,
+              fmgr,
+              pCurrentContext.config);
+    } else {
+      if (newReachedSet) {
+        pCurrentContext.reached =
+            createInitialReachedSet(
+                pCurrentContext.cpa,
+                pMainFunction,
+                localCoreComponents,
+                null,
+                null,
+                pCurrentContext.config);
+      }
     }
 
     // always create algorithm with new "local" shutdown manager
@@ -743,7 +779,8 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
       final CFANode pMainFunction,
       final CoreComponentsFactory pFactory,
       final @Nullable List<ReachedSet> previousReachedSets,
-      final @Nullable FormulaManagerView pFMgr)
+      final @Nullable FormulaManagerView pFMgr,
+      final Configuration pConfig)
       throws InterruptedException {
     logger.log(Level.FINE, "Creating initial reached set");
 
@@ -753,7 +790,8 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
     Precision initialPrecision =
         pCpa.getInitialPrecision(pMainFunction, StateSpacePartition.getDefaultPartition());
     if (previousReachedSets != null && previousReachedSets.size() > 0) {
-      initialPrecision = aggregatePrecisionsForReuse(previousReachedSets, initialPrecision, pFMgr);
+      initialPrecision =
+          aggregatePrecisionsForReuse(previousReachedSets, initialPrecision, pFMgr, pConfig);
     }
 
     ReachedSet reached = pFactory.createReachedSet();
@@ -764,40 +802,83 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
   private Precision aggregatePrecisionsForReuse(
       final List<ReachedSet> pPreviousReachedSets,
       final Precision pInitialPrecision,
-      final @Nullable FormulaManagerView pFMgr) {
+      final @Nullable FormulaManagerView pFMgr,
+      final Configuration pConfig) {
     Preconditions.checkArgument(pPreviousReachedSets.size() > 0);
     Precision resultPrec = pInitialPrecision;
 
     PredicatePrecision predPrec;
     LoopBoundPrecision loopPrec;
+    ConstraintsPrecision constrPrec;
     VariableTrackingPrecision varPrec =
         Precisions.extractPrecisionByType(resultPrec, VariableTrackingPrecision.class);
     if (varPrec != null) {
-      VariableTrackingPrecision varPrecInter;
+      try {
+        if (varPrec instanceof ConfigurablePrecision) {
+          varPrec = VariableTrackingPrecision.createRefineablePrecision(pConfig, varPrec);
+        }
+        VariableTrackingPrecision varPrecInter;
+
+        boolean changed = false;
+
+        for (ReachedSet previousReached : pPreviousReachedSets) {
+          if (previousReached != null) {
+            for (Precision prec : previousReached.getPrecisions()) {
+              varPrecInter =
+                  Precisions.extractPrecisionByType(prec, VariableTrackingPrecision.class);
+              if (varPrecInter != null && !(varPrecInter instanceof ConfigurablePrecision)) {
+                varPrec = varPrec.join(varPrecInter);
+                changed = true;
+              }
+
+              predPrec = Precisions.extractPrecisionByType(resultPrec, PredicatePrecision.class);
+              if (predPrec != null && pFMgr != null) {
+                varPrec =
+                    varPrec.withIncrement(convertPredPrecToVariableTrackingPrec(predPrec, pFMgr));
+                changed = true;
+              }
+            }
+          }
+        }
+        if (changed) {
+          resultPrec =
+              Precisions.replaceByType(
+                  resultPrec, varPrec, Predicates.instanceOf(VariableTrackingPrecision.class));
+        }
+      } catch (InvalidConfigurationException e) {
+        logger.logException(Level.INFO, e, "Reuse of precision failed. Continue without reuse");
+      }
+    }
+
+    constrPrec = Precisions.extractPrecisionByType(resultPrec, ConstraintsPrecision.class);
+    if (constrPrec != null) {
+      try {
+        if (!(constrPrec instanceof RefinableConstraintsPrecision)) {
+
+          constrPrec = new RefinableConstraintsPrecision(pConfig);
+        }
+      ConstraintsPrecision constrPrecInter;
+        boolean changed = false;
 
       for (ReachedSet previousReached : pPreviousReachedSets) {
         if (previousReached != null) {
           for (Precision prec : previousReached.getPrecisions()) {
-            varPrecInter = Precisions.extractPrecisionByType(prec, VariableTrackingPrecision.class);
-            if (varPrecInter != null) {
-              varPrec = varPrec.join(varPrecInter);
-            }
-
-            predPrec = Precisions.extractPrecisionByType(resultPrec, PredicatePrecision.class);
-            if (predPrec != null) {
-              Preconditions.checkNotNull(pFMgr);
-              varPrec = varPrec.withIncrement(convertPredPrecToVariableTrackingPrec(predPrec, pFMgr));
+            constrPrecInter = Precisions.extractPrecisionByType(prec, ConstraintsPrecision.class);
+            if (constrPrecInter != null && !(constrPrecInter instanceof FullConstraintsPrecision)) {
+              constrPrec = constrPrec.join(constrPrecInter);
+                changed = true;
             }
           }
         }
       }
-
-      resultPrec =
-          Precisions.replaceByType(
-              resultPrec,
-              varPrec,
-              Predicates.instanceOf(VariableTrackingPrecision.class));
-
+        if (changed) {
+        resultPrec =
+            Precisions.replaceByType(
+                resultPrec, constrPrec, Predicates.instanceOf(ConstraintsPrecision.class));
+      }
+      } catch (InvalidConfigurationException e) {
+        logger.logException(Level.INFO, e, "Reuse of precision failed. Continue without reuse");
+      }
     }
 
     loopPrec = Precisions.extractPrecisionByType(resultPrec, LoopBoundPrecision.class);

@@ -28,6 +28,7 @@ import static com.google.common.collect.FluentIterable.from;
 import com.google.common.base.Joiner;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -190,7 +191,7 @@ public class LockTransferRelation extends SingleEdgeTransferRelation {
       }
       return Collections.singleton(successor);
     } else {
-      return Collections.emptySet();
+      return ImmutableSet.of();
     }
   }
 
@@ -238,7 +239,7 @@ public class LockTransferRelation extends SingleEdgeTransferRelation {
       default:
         throw new UnrecognizedCodeException("Unknown edge type", cfaEdge);
     }
-    return Collections.emptyList();
+    return ImmutableList.of();
   }
 
   private List<AbstractLockEffect> handleAssumption(CAssumeEdge cfaEdge) {
@@ -269,7 +270,7 @@ public class LockTransferRelation extends SingleEdgeTransferRelation {
         }
       }
     }
-    return Collections.emptyList();
+    return ImmutableList.of();
   }
 
   private ImmutableList<? extends AbstractLockEffect> convertAnnotationToLockEffect(
@@ -323,13 +324,13 @@ public class LockTransferRelation extends SingleEdgeTransferRelation {
         return result;
       }
     }
-    return Collections.emptyList();
+    return ImmutableList.of();
   }
 
   private List<AbstractLockEffect> handleFunctionCallExpression(CFunctionCallExpression function) {
     String functionName = function.getFunctionNameExpression().toASTString();
     if (!lockDescription.getFunctionEffectDescription().containsKey(functionName)) {
-      return Collections.emptyList();
+      return ImmutableList.of();
     }
     Pair<LockEffect, LockIdUnprepared> locksWithEffect =
         lockDescription.getFunctionEffectDescription().get(functionName);
@@ -406,7 +407,7 @@ public class LockTransferRelation extends SingleEdgeTransferRelation {
       return handleFunctionCallExpression(funcStatement.getFunctionCallExpression());
     }
     // No lock-relating operations
-    return Collections.emptyList();
+    return ImmutableList.of();
   }
 
   private List<AbstractLockEffect> handleFunctionCall(CFunctionCallEdge callEdge) {
