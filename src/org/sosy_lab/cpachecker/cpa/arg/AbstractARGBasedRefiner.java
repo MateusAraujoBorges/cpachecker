@@ -151,7 +151,7 @@ public class AbstractARGBasedRefiner implements Refiner, StatisticsProvider {
       //FIXME: temporary hack to dump current path condtion
       if (CPAs.retrieveCPA(argCpa, ConstraintsCPA.class) != null) {
         try {
-          PCPVisitor.dumpPcForAlpaca(path.getLastState());
+          PCPVisitor.dumpPcForAlpaca(path.getLastState(), logger);
         } catch (IOException e) {
           throw new CPAException("yep, it failed",e);
         }

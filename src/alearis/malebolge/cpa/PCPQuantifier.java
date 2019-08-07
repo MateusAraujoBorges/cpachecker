@@ -138,7 +138,7 @@ public class PCPQuantifier implements ConstraintQuantifier {
       return Optional.empty();
     }
 
-    PCPVisitor translator = new PCPVisitor();
+    PCPVisitor translator = new PCPVisitor(logger);
 
     StringBuilder header = new StringBuilder();
     StringBuilder body = new StringBuilder();

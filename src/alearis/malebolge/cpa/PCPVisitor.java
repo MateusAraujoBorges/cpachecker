@@ -30,13 +30,14 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
+import java.util.logging.Level;
 import javax.annotation.Nonnull;
+import org.sosy_lab.common.log.LogManager;
 import org.sosy_lab.cpachecker.cfa.types.Type;
 import org.sosy_lab.cpachecker.cfa.types.c.CSimpleType;
+import org.sosy_lab.cpachecker.cfa.types.c.CType;
 import org.sosy_lab.cpachecker.cpa.arg.ARGState;
 import org.sosy_lab.cpachecker.cpa.constraints.constraint.Constraint;
 import org.sosy_lab.cpachecker.cpa.constraints.domain.ConstraintsState;
@@ -63,6 +64,7 @@ import org.sosy_lab.cpachecker.cpa.value.symbolic.type.PointerExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.ShiftLeftExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.ShiftRightExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SubtractionExpression;
+import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicIdentifier;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicValue;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicValueVisitor;
@@ -72,7 +74,13 @@ import org.sosy_lab.cpachecker.util.AbstractStates;
 
 public class PCPVisitor implements SymbolicValueVisitor<String> {
 
+  private final LogManager logger;
+
   private final Map<SymbolicIdentifier, Type> vars = new HashMap<>();
+
+  public PCPVisitor(LogManager pLogger) {
+    logger = pLogger;
+  }
 
   public Set<SymbolicIdentifier> getVarSet() {
     return vars.keySet();
@@ -92,7 +100,7 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
   public static String prepareUniqueNameForVar(SymbolicIdentifier pValue) {
     String rep = pValue.getRepresentation();
     if (rep.charAt(0) == '_') {
-      rep = "@" + rep;
+      rep = "var@" + rep;
     }
     return rep.replace("::","@")
         //.replace("/","@")
@@ -212,7 +220,32 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
 
   @Override
   public String visit(CastExpression pExpression) {
-    throw new UnsupportedOperationException("casts are not supported in PCP for now");
+    SymbolicExpression nested = pExpression.getOperand();
+    Type original = nested.getType();
+    Type toCast = pExpression.getType();
+
+    if (!(original instanceof CType) || !(toCast instanceof CType)) {
+      throw new UnsupportedOperationException("Only C types are supported for now!");
+    }
+    CType cOriginal = ((CType) original).getCanonicalType();
+    CType cToCast = ((CType) toCast).getCanonicalType();
+
+    //temporary implementation to investigate where/how casts appear
+    logger.log(Level.WARNING, "cast ignored: ", cOriginal, " -> ", cToCast);
+    logger.log(Level.WARNING, "casted expression: ", nested);
+    logger.log(Level.WARNING, "casted expression: ", nested.getRepresentation());
+    return nested.accept(this);
+//
+//    if (cToCast.canBeAssignedFrom(cOriginal)) {
+//
+//    }
+//
+//    if (original instanceof CSimpleType && toCast instanceof CSimpleType) {
+//      return nested.accept(this);
+//    } else { //just ignore for now
+//      logger.log(Level.WARNING, "Non-trivial cast ignored: ", original, " -> ", toCast);
+//      return nested.accept(this);
+//    }
   }
 
   @Override
@@ -230,10 +263,10 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
     return "(not " + pExpression.getOperand().accept(this) + ")";
   }
 
-  public static void dumpPcForAlpaca(ARGState pLastState) throws IOException {
+  public static void dumpPcForAlpaca(ARGState pLastState, LogManager logger) throws IOException {
     ConstraintsState cstate = AbstractStates.extractStateByType(pLastState, ConstraintsState.class);
     StringBuilder sb = new StringBuilder();
-    PCPVisitor visitor = new PCPVisitor();
+    PCPVisitor visitor = new PCPVisitor(logger);
     if (cstate.size() > 1) {
       sb.append("(and ");
     }
