@@ -32,6 +32,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
 import org.sosy_lab.common.log.LogManager;
@@ -41,6 +42,7 @@ import org.sosy_lab.cpachecker.cfa.types.c.CType;
 import org.sosy_lab.cpachecker.cpa.arg.ARGState;
 import org.sosy_lab.cpachecker.cpa.constraints.constraint.Constraint;
 import org.sosy_lab.cpachecker.cpa.constraints.domain.ConstraintsState;
+import org.sosy_lab.cpachecker.cpa.value.ValueAnalysisState;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.AdditionExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.AddressOfExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.BinaryAndExpression;
@@ -68,6 +70,7 @@ import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicIdentifier;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicValue;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicValueVisitor;
+import org.sosy_lab.cpachecker.cpa.value.symbolic.util.SymbolicIdentifierLocator;
 import org.sosy_lab.cpachecker.cpa.value.type.NumericValue;
 import org.sosy_lab.cpachecker.cpa.value.type.Value;
 import org.sosy_lab.cpachecker.util.AbstractStates;
@@ -102,7 +105,7 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
     if (rep.charAt(0) == '_') {
       rep = "var@" + rep;
     }
-    return rep.replace("::","@")
+    return rep.replace("::", "@")
         //.replace("/","@")
         + "~" + pValue.getId();
   }
@@ -134,32 +137,32 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
 
   @Override
   public String visit(AdditionExpression pExpression) {
-    return handleBinary("+",pExpression);
+    return handleBinary("+", pExpression);
   }
 
   @Override
   public String visit(SubtractionExpression pExpression) {
-    return handleBinary("-",pExpression);
+    return handleBinary("-", pExpression);
   }
 
   @Override
   public String visit(MultiplicationExpression pExpression) {
-    return handleBinary("*",pExpression);
+    return handleBinary("*", pExpression);
   }
 
   @Override
   public String visit(DivisionExpression pExpression) {
-    return handleBinary("/",pExpression);
+    return handleBinary("/", pExpression);
   }
 
   @Override
   public String visit(ModuloExpression pExpression) {
-    return handleBinary("mod",pExpression);
+    return handleBinary("mod", pExpression);
   }
 
   @Override
   public String visit(BinaryAndExpression pExpression) {
-    return handleBinary("bvand",pExpression);
+    return handleBinary("bvand", pExpression);
   }
 
   @Override
@@ -170,22 +173,22 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
 
   @Override
   public String visit(BinaryOrExpression pExpression) {
-    return handleBinary("bvor",pExpression);
+    return handleBinary("bvor", pExpression);
   }
 
   @Override
   public String visit(BinaryXorExpression pExpression) {
-    return handleBinary("bvxor",pExpression);
+    return handleBinary("bvxor", pExpression);
   }
 
   @Override
   public String visit(ShiftRightExpression pExpression) {
-    return handleBinary("bvshr",pExpression);
+    return handleBinary("bvshr", pExpression);
   }
 
   @Override
   public String visit(ShiftLeftExpression pExpression) {
-    return handleBinary("bvshl",pExpression);
+    return handleBinary("bvshl", pExpression);
   }
 
   @Override
@@ -195,27 +198,27 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
 
   @Override
   public String visit(LessThanOrEqualExpression pExpression) {
-    return handleBinary("<=",pExpression);
+    return handleBinary("<=", pExpression);
   }
 
   @Override
   public String visit(LessThanExpression pExpression) {
-    return handleBinary("<",pExpression);
+    return handleBinary("<", pExpression);
   }
 
   @Override
   public String visit(EqualsExpression pExpression) {
-    return handleBinary("=",pExpression);
+    return handleBinary("=", pExpression);
   }
 
   @Override
   public String visit(LogicalOrExpression pExpression) {
-    return handleBinary("or",pExpression);
+    return handleBinary("or", pExpression);
   }
 
   @Override
   public String visit(LogicalAndExpression pExpression) {
-    return handleBinary("and",pExpression);
+    return handleBinary("and", pExpression);
   }
 
   @Override
@@ -265,6 +268,9 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
 
   public static void dumpPcForAlpaca(ARGState pLastState, LogManager logger) throws IOException {
     ConstraintsState cstate = AbstractStates.extractStateByType(pLastState, ConstraintsState.class);
+    ValueAnalysisState vaState =
+        AbstractStates.extractStateByType(pLastState, ValueAnalysisState.class);
+
     StringBuilder sb = new StringBuilder();
     PCPVisitor visitor = new PCPVisitor(logger);
     if (cstate.size() > 1) {
@@ -277,7 +283,26 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
     if (cstate.size() > 1) {
       sb.append(")");
     }
-    sb.append("\n");
+    sb.append("\n##\n");
+
+    // list all symbolic variables produced in this trace
+    Set<SymbolicIdentifier> traceVars = new TreeSet<>();
+    vaState.getConstants().stream()
+        .forEach(e -> {
+          Value v = e.getValue().getValue();
+          if (v instanceof SymbolicValue) {
+            SymbolicValue sv = (SymbolicValue) v;
+            SymbolicIdentifierLocator varExtractor = SymbolicIdentifierLocator.getInstance();
+            traceVars.addAll(sv.accept(varExtractor));
+          }
+        });
+    for (SymbolicIdentifier symVar : traceVars) {
+      sb.append(prepareUniqueNameForVar(symVar));
+      sb.append("\n");
+    }
+    sb.append("\n##\n");
+
+    // list all symbolic variables, together with their types, that are present in the constraint
     visitor.getVars().forEach((var, type) -> {
       sb.append(prepareUniqueNameForVar(var));
       sb.append(" -> ");
