@@ -25,7 +25,7 @@ package org.sosy_lab.cpachecker.cpa.arg;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
-import alearis.malebolge.cpa.PCPVisitor;
+import alearis.malebolge.cpa.util.AlpacaUtils;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Iterables;
 import com.google.errorprone.annotations.ForOverride;
@@ -151,7 +151,7 @@ public class AbstractARGBasedRefiner implements Refiner, StatisticsProvider {
       //FIXME: temporary hack to dump current path condtion
       if (CPAs.retrieveCPA(argCpa, ConstraintsCPA.class) != null) {
         try {
-          PCPVisitor.dumpPcForAlpaca(path.getLastState(), logger);
+          AlpacaUtils.dumpPcForAlpaca(path.getLastState(), logger);
         } catch (IOException e) {
           throw new CPAException("yep, it failed",e);
         }
