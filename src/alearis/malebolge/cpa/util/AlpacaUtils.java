@@ -48,7 +48,10 @@ import org.sosy_lab.cpachecker.cpa.value.type.Value;
 import org.sosy_lab.cpachecker.util.AbstractStates;
 
 public class AlpacaUtils {
-  public static void dumpPcForAlpaca(ARGState pLastState, LogManager logger) throws IOException {
+  public static void dumpPcForAlpaca(
+      ARGState pLastState,
+      Path outputPath,
+      LogManager logger) throws IOException {
     ConstraintsState cstate = AbstractStates.extractStateByType(pLastState, ConstraintsState.class);
 
     StringBuilder sb = new StringBuilder();
@@ -84,7 +87,7 @@ public class AlpacaUtils {
       sb.append("\n");
     });
 
-    Path output = Files.write(Paths.get("output", "alpaca.pc"),
+    Path output = Files.write(outputPath,
         Collections.singletonList(sb.toString()), StandardOpenOption.CREATE,
         StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
     System.out.println("[alpaca-writer] pc written to: " + output);

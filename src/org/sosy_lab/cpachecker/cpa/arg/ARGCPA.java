@@ -30,8 +30,12 @@ import com.google.common.base.Predicates;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Collection;
 import org.sosy_lab.common.configuration.Configuration;
+import org.sosy_lab.common.configuration.FileOption;
+import org.sosy_lab.common.configuration.FileOption.Type;
 import org.sosy_lab.common.configuration.InvalidConfigurationException;
 import org.sosy_lab.common.configuration.Option;
 import org.sosy_lab.common.configuration.Options;
@@ -103,6 +107,10 @@ public class ARGCPA extends AbstractSingleWrapperCPA
       description =
     "prevent the stop-operator from aborting the stop-check early when it crosses a target state")
   private boolean coverTargetStates = false;
+
+  @Option(description = "path to file containing the pc for the witness")
+  @FileOption(Type.OUTPUT_FILE)
+  private Path alpacaPC = Paths.get("alpaca.pc");
 
   private final LogManager logger;
 
@@ -255,5 +263,9 @@ public class ARGCPA extends AbstractSingleWrapperCPA
     return ((ConfigurableProgramAnalysisWithBAM) getWrappedCpa())
         .isCoveredByRecursiveState(
             ((ARGState) state1).getWrappedState(), ((ARGState) state2).getWrappedState());
+  }
+
+  public Path getAlpacaPCFile() {
+    return alpacaPC;
   }
 }
