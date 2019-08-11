@@ -29,17 +29,22 @@ import java.util.Optional;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.sosy_lab.cpachecker.core.defaults.AbstractSingleWrapperState;
 import org.sosy_lab.cpachecker.core.interfaces.AbstractState;
+import org.sosy_lab.cpachecker.core.interfaces.Graphable;
 
-public class ProbabilisticState extends AbstractSingleWrapperState {
+public class ProbabilisticState extends AbstractSingleWrapperState
+    implements Graphable {
 
   public enum Type {
     TRANSIENT,
     SUCCESS,
     FAILURE,
-    GREY
+    GREY,
+    ASSUMPTION_VIOLATION
   }
 
   private Optional<BigRational> probability;
+
+  private BigRational domain; //truncated by assumptions
   private Type type = Type.TRANSIENT;
   private final int depth;
 
@@ -47,7 +52,16 @@ public class ProbabilisticState extends AbstractSingleWrapperState {
     super(pWrappedState);
     this.depth = depth;
     this.probability = Optional.empty();
+    this.domain = BigRational.ONE;
   }
+
+  public ProbabilisticState(ProbabilisticState old, AbstractState wrapped, int depth) {
+    super(wrapped);
+    this.depth = depth;
+    this.probability = old.probability;
+    this.domain = old.domain;
+  }
+
 
   public Type getType() {
     return type;
@@ -67,6 +81,14 @@ public class ProbabilisticState extends AbstractSingleWrapperState {
     this.probability = Optional.of(probability);
   }
 
+  public BigRational getDomain() {
+    return domain;
+  }
+
+  public void setDomain(BigRational domain) {
+    this.domain = domain;
+  }
+
   public int getDepth() {
     return depth;
   }
@@ -74,7 +96,31 @@ public class ProbabilisticState extends AbstractSingleWrapperState {
   @Override
   public String toString() {
     return "Probabilistic State (type: " + type + " depth: " + depth
-        + " prob: " + (probability.isPresent() ? probability.get() : "-") + ") \n"
+        + " prob: " + (probability.isPresent() ? probability.get() : "-")
+        + " domain" + domain.doubleValue() + ") \n"
         + getWrappedState().toString();
   }
+
+  @Override
+  public String toDOTLabel() {
+    StringBuilder sb = new StringBuilder();
+    sb.append(type);
+    sb.append("\ndomain: ");
+    sb.append(domain.doubleValue());
+    sb.append("\\n");
+    if (probability.isPresent()) {
+      sb.append("prob: ");
+      sb.append(probability.get().doubleValue());
+    }
+    if (getWrappedState() instanceof Graphable) {
+      sb.append(((Graphable) getWrappedState()).toDOTLabel());
+    }
+    return sb.toString();
+  }
+
+  @Override
+  public boolean shouldBeHighlighted() {
+    return false;
+  }
+
 }

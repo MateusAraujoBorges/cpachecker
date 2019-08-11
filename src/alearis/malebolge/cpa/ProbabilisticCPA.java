@@ -24,11 +24,15 @@
 package alearis.malebolge.cpa;
 
 import alearis.malebolge.cpa.ProbabilisticState.Type;
+import alearis.malebolge.cpa.edge.VerifierAssumeEdge;
 import alearis.malebolge.cpa.util.BigRational;
+import com.google.common.base.Preconditions;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+import javax.annotation.Nonnull;
 import org.sosy_lab.common.ShutdownNotifier;
 import org.sosy_lab.common.configuration.Configuration;
 import org.sosy_lab.common.configuration.InvalidConfigurationException;
@@ -37,7 +41,9 @@ import org.sosy_lab.common.configuration.Options;
 import org.sosy_lab.common.log.LogManager;
 import org.sosy_lab.cpachecker.cfa.CFA;
 import org.sosy_lab.cpachecker.cfa.model.CFAEdge;
+import org.sosy_lab.cpachecker.cfa.model.CFAEdgeType;
 import org.sosy_lab.cpachecker.cfa.model.CFANode;
+import org.sosy_lab.cpachecker.cfa.model.CFATerminationNode;
 import org.sosy_lab.cpachecker.core.defaults.AbstractSingleWrapperCPA;
 import org.sosy_lab.cpachecker.core.defaults.AbstractSingleWrapperState;
 import org.sosy_lab.cpachecker.core.defaults.AbstractSingleWrapperTransferRelation;
@@ -69,7 +75,7 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
   private int depthLimit = 1000;
 
   @Option(description = "Quantify probability of gray paths")
-  private boolean quantifyGray = true;
+  private boolean quantifyGrey = true;
 
   private final ConstraintQuantifier counter;
   private final LogManager logger;
@@ -107,63 +113,93 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
       public Collection<? extends AbstractState> getAbstractSuccessors(
           AbstractState state, Precision precision)
           throws CPATransferException, InterruptedException {
-        ProbabilisticState pstate =
+        ProbabilisticState pState =
             AbstractStates.extractStateByType(state, ProbabilisticState.class);
-        int depth = pstate.getDepth();
-        Collection<? extends AbstractState> successors;
-
-        if (depth >= depthLimit) {
-          pstate.setType(Type.GREY);
-          successors = Collections.emptyList();
-        } else {
-          successors = this.transferRelation.
-              getAbstractSuccessors(pstate.getWrappedState(), precision);
-          if (successors.isEmpty()) {
-            Type endType = pstate.isTarget() ? Type.FAILURE : Type.SUCCESS;
-            pstate.setType(endType);
-          }
-        }
-
-        if (pstate.getType() != Type.TRANSIENT) {
-          countAndUpdate(pstate);
-        }
-
-        return successors.stream()
-            .map(s -> new ProbabilisticState(s, depth + 1))
-            .collect(Collectors.toList());
+        return computeSuccessors(pState, precision, Optional.empty());
       }
 
-      //TODO refactor copy/paste
       @Override
       public Collection<? extends AbstractState> getAbstractSuccessorsForEdge(
           AbstractState state, Precision precision, CFAEdge cfaEdge)
           throws CPATransferException, InterruptedException {
         ProbabilisticState pstate =
             AbstractStates.extractStateByType(state, ProbabilisticState.class);
-        int depth = pstate.getDepth();
-        Collection<? extends AbstractState> successors;
+        return computeSuccessors(pstate, precision, Optional.of(cfaEdge));
+      }
 
-        if (depth >= depthLimit) {
+      @Nonnull
+      public Collection<? extends AbstractState> computeSuccessors(
+          ProbabilisticState pstate,
+          Precision precision,
+          Optional<CFAEdge> edge)
+          throws CPATransferException, InterruptedException {
+        Collection<? extends AbstractState> successors;
+        boolean isAssumptionViolation = false;
+        int depth = pstate.getDepth();
+        if (depth > depthLimit) {
           pstate.setType(Type.GREY);
           successors = Collections.emptyList();
         } else {
-          successors = this.transferRelation
-              .getAbstractSuccessorsForEdge(pstate.getWrappedState(), precision, cfaEdge);
+          if (edge.isPresent()) {
+            successors = this.transferRelation.
+                getAbstractSuccessorsForEdge(pstate.getWrappedState(), precision, edge.get());
+          } else {
+            successors = this.transferRelation.
+                getAbstractSuccessors(pstate.getWrappedState(), precision);
+          }
           if (successors.isEmpty()) {
-            Type endType = pstate.isTarget() ? Type.FAILURE : Type.SUCCESS;
-            pstate.setType(endType);
+            //ignore nodes that represent an "assumption violation"
+            if (isAssumptionViolation(pstate)) {
+              pstate.setType(Type.ASSUMPTION_VIOLATION);
+            } else {
+              Type endType = pstate.isTarget() ? Type.FAILURE : Type.SUCCESS;
+              pstate.setType(endType);
+            }
+          } else {
+            Preconditions.checkState(!isAssumptionViolation(pstate),
+                "Why would a state that 'violates' assumptions have successors?");
           }
         }
 
-        if (pstate.getType() != Type.TRANSIENT) {
+        Type ptype = pstate.getType();
+        if (ptype != Type.TRANSIENT && ptype != Type.ASSUMPTION_VIOLATION) {
           countAndUpdate(pstate);
+        } else if (hasSuccessfulAssumeEdge(AbstractStates.extractLocation(pstate))) {
+          updateDomainProbability(pstate);
         }
-
         return successors.stream()
-            .map(s -> new ProbabilisticState(s, depth + 1))
+            .map(s -> new ProbabilisticState(pstate, s, depth + 1))
             .collect(Collectors.toList());
       }
     };
+  }
+
+  private boolean hasSuccessfulAssumeEdge(CFANode location) {
+    int nEnteringEdges = location.getNumEnteringEdges();
+    for (int i = 0; i < nEnteringEdges; i++) {
+      CFAEdge edge = location.getEnteringEdge(i);
+      CFAEdgeType eType = edge.getEdgeType();
+      if (eType == CFAEdgeType.AssumeEdge
+          && edge instanceof VerifierAssumeEdge
+          && ((VerifierAssumeEdge) edge).getTruthAssumption()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public <T extends AbstractState> boolean isAssumptionViolation(T state) {
+    CFANode location = AbstractStates.extractLocation(state);
+    // haven't seen terminal states from assumptions with >1 parent
+    if (location.getNumEnteringEdges() == 0) {
+      return false;
+    }
+    CFAEdge edge = location.getEnteringEdge(0);
+
+    return location instanceof CFATerminationNode
+        && ((CFATerminationNode) location).isAssumptionFailure()
+        && edge instanceof VerifierAssumeEdge
+        && !((VerifierAssumeEdge) edge).getTruthAssumption();
   }
 
   @Override
@@ -171,17 +207,16 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
     return (state1, state2, precision) -> {
       AbstractState wrapped1 = AbstractStates.extractStateByType(state1, ProbabilisticState.class)
           .getWrappedState();
-      AbstractState wrapped2 = AbstractStates.extractStateByType(state2, ProbabilisticState.class)
-          .getWrappedState();
-      int depth = AbstractStates.extractStateByType(state2, ProbabilisticState.class)
-          .getDepth();
+      ProbabilisticState pState2 = AbstractStates.extractStateByType(state2, ProbabilisticState.class);
+      AbstractState wrapped2 = pState2.getWrappedState();
+      int depth = pState2.getDepth();
 
       AbstractState merged =
           getWrappedCpa().getMergeOperator().merge(wrapped1, wrapped2, precision);
       if (merged == wrapped2) {
         return state2;
       }
-      return new ProbabilisticState(merged, depth);
+      return new ProbabilisticState(pState2, merged, depth);
     };
   }
 
@@ -198,8 +233,8 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
   @Override
   public PrecisionAdjustment getPrecisionAdjustment() {
     return (state, precision, states, stateProjection, fullState) -> {
-      AbstractState wrapped = AbstractStates.extractStateByType(state, ProbabilisticState.class)
-          .getWrappedState();
+      ProbabilisticState pState = AbstractStates.extractStateByType(state, ProbabilisticState.class);
+      AbstractState wrapped = pState.getWrappedState();
       AbstractState fullWrapped =
           AbstractStates.extractStateByType(fullState, ProbabilisticState.class)
               .getWrappedState();
@@ -209,8 +244,8 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
       if (adj.isPresent()) {
         return Optional.of(
             adj.get().withAbstractState(
-                new ProbabilisticState(adj.get().abstractState(),
-                    ((ProbabilisticState) state).getDepth())));
+                new ProbabilisticState(pState, adj.get().abstractState(),
+                    pState.getDepth())));
       }
       return Optional.empty();
     };
@@ -218,7 +253,7 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
 
 
   private void countAndUpdate(ProbabilisticState state) throws InterruptedException {
-    if (state.getType() == Type.GREY && !quantifyGray) {
+    if (state.getType() == Type.GREY && !quantifyGrey) {
       return;
     }
     BigRational count =
@@ -227,9 +262,16 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
     this.currentProbabilities.update(state);
   }
 
+  private void updateDomainProbability(
+      ProbabilisticState state) throws InterruptedException {
+    BigRational count = counter.quantify(
+        AbstractStates.extractStateByType(state, ConstraintsState.class));
+    state.setDomain(count);
+  }
+
   @Override
   public void collectStatistics(Collection<Statistics> statsCollection) {
-    if (!quantifyGray) {
+    if (!quantifyGrey) {
       currentProbabilities.setGreyToRemainingUnexplored();
     }
     statsCollection.add(currentProbabilities);

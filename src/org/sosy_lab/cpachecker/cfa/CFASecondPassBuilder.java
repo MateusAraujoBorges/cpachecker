@@ -23,6 +23,7 @@
  */
 package org.sosy_lab.cpachecker.cfa;
 
+import alearis.malebolge.cpa.edge.VerifierAssumeEdge;
 import com.google.common.collect.ImmutableSet;
 import java.util.List;
 import java.util.Set;
@@ -324,11 +325,11 @@ public class CFASecondPassBuilder {
                                                       BinaryOperator.NOT_EQUALS);
     }
 
-    AssumeEdge trueEdge = new CAssumeEdge(edge.getRawStatement(), edge.getFileLocation(),
+    AssumeEdge trueEdge = new VerifierAssumeEdge(edge.getRawStatement(), edge.getFileLocation(),
         edge.getPredecessor(), edge.getSuccessor(), assumeExp, true);
 
-    CFANode elseNode = new CFATerminationNode(edge.getPredecessor().getFunctionName());
-    AssumeEdge falseEdge = new CAssumeEdge(edge.getRawStatement(), edge.getFileLocation(),
+    CFANode elseNode = new CFATerminationNode(edge.getPredecessor().getFunctionName(), true);
+    AssumeEdge falseEdge = new VerifierAssumeEdge(edge.getRawStatement(), edge.getFileLocation(),
         edge.getPredecessor(), elseNode, assumeExp, false);
 
     CFACreationUtils.removeEdgeFromNodes(edge);

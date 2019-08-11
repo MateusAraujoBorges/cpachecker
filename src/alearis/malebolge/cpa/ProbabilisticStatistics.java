@@ -40,7 +40,7 @@ public class ProbabilisticStatistics implements Statistics {
   private BigRational successProbability = BigRational.ZERO;
   private BigRational failureProbability = BigRational.ZERO;
   private BigRational greyProbability = BigRational.ZERO;
-  private BigRational domainSize = BigRational.ONE;
+  private BigRational smallestDomain = BigRational.ONE;
 
   private int nSuccessPaths = 0;
   private int nFailurePaths = 0;
@@ -60,21 +60,21 @@ public class ProbabilisticStatistics implements Statistics {
       PrintStream out, Result result, UnmodifiableReachedSet reached) {
     StatisticsWriter.writingStatisticsTo(out)
         .spacer()
-        .put("success probability", successProbability.div(domainSize).doubleValue())
+        .put("success probability", successProbability.doubleValue())
         .beginLevel()
-        .put("-", successProbability.div(domainSize))
+        .put("-", successProbability)
         .endLevel()
-        .put("failure probability", failureProbability.div(domainSize).doubleValue())
+        .put("failure probability", failureProbability.doubleValue())
         .beginLevel()
-        .put("-", failureProbability.div(domainSize))
+        .put("-", failureProbability)
         .endLevel()
-        .put("grey probability", greyProbability.div(domainSize).doubleValue())
+        .put("grey probability", greyProbability.doubleValue())
         .beginLevel()
-        .put("-", greyProbability.div(domainSize))
+        .put("-", greyProbability)
         .endLevel()
-        .put("domain size", domainSize.doubleValue())
+        .put("smallest domain", smallestDomain.doubleValue())
         .beginLevel()
-        .put("-", domainSize)
+        .put("-", smallestDomain)
         .endLevel()
         .spacer()
         .put("#success paths", nSuccessPaths)
@@ -100,18 +100,22 @@ public class ProbabilisticStatistics implements Statistics {
     Preconditions.checkArgument(state.getType() != Type.TRANSIENT,
         "Transient states shouldn't be tallied!");
     BigRational probability = state.getProbability().get();
+    BigRational domain = state.getDomain();
+    if (smallestDomain.compareTo(domain) > 0) {
+      this.smallestDomain = domain;
+    }
 
     switch (state.getType()) {
       case SUCCESS:
-        successProbability = successProbability.plus(probability);
+        successProbability = probability.div(domain).plus(successProbability);
         nSuccessPaths++;
         break;
       case FAILURE:
-        failureProbability = failureProbability.plus(probability);
+        failureProbability = probability.div(domain).plus(failureProbability);
         nFailurePaths++;
         break;
       case GREY:
-        greyProbability = greyProbability.plus(probability);
+        greyProbability = probability.div(domain).plus(greyProbability);
         nGreyPaths++;
         break;
       case TRANSIENT:
@@ -121,7 +125,6 @@ public class ProbabilisticStatistics implements Statistics {
     //more like postcondition
     Preconditions.checkState(repOk(), "Inconsistent probability totals");
   }
-
 
   @Override
   public @Nullable String getName() {
