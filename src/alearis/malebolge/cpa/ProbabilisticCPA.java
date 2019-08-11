@@ -29,7 +29,6 @@ import alearis.malebolge.cpa.util.BigRational;
 import com.google.common.base.Preconditions;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
@@ -79,7 +78,7 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
 
   private final ConstraintQuantifier counter;
   private final LogManager logger;
-  private final ProbabilisticStatistics currentProbabilities;
+  private final ProbabilisticStatistics statistics;
   private final CFA cfa;
   private final ShutdownNotifier shutdownNotifier;
 
@@ -94,9 +93,9 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
     pConfig.inject(this);
     this.logger = pLogger;
     this.cfa = pCfa;
-    currentProbabilities = new ProbabilisticStatistics();
+    statistics = new ProbabilisticStatistics();
     this.shutdownNotifier = pShutdownNotifier;
-    counter = new PCPQuantifier(pConfig, shutdownNotifier, logger);
+    counter = new PCPQuantifier(pConfig, shutdownNotifier, logger, statistics.getTimeCounting());
   }
 
   @Override
@@ -207,7 +206,8 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
     return (state1, state2, precision) -> {
       AbstractState wrapped1 = AbstractStates.extractStateByType(state1, ProbabilisticState.class)
           .getWrappedState();
-      ProbabilisticState pState2 = AbstractStates.extractStateByType(state2, ProbabilisticState.class);
+      ProbabilisticState pState2 =
+          AbstractStates.extractStateByType(state2, ProbabilisticState.class);
       AbstractState wrapped2 = pState2.getWrappedState();
       int depth = pState2.getDepth();
 
@@ -233,7 +233,8 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
   @Override
   public PrecisionAdjustment getPrecisionAdjustment() {
     return (state, precision, states, stateProjection, fullState) -> {
-      ProbabilisticState pState = AbstractStates.extractStateByType(state, ProbabilisticState.class);
+      ProbabilisticState pState =
+          AbstractStates.extractStateByType(state, ProbabilisticState.class);
       AbstractState wrapped = pState.getWrappedState();
       AbstractState fullWrapped =
           AbstractStates.extractStateByType(fullState, ProbabilisticState.class)
@@ -259,7 +260,7 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
     BigRational count =
         counter.quantify(AbstractStates.extractStateByType(state, ConstraintsState.class));
     state.setProbability(count);
-    this.currentProbabilities.update(state);
+    this.statistics.update(state);
   }
 
   private void updateDomainProbability(
@@ -272,9 +273,9 @@ public class ProbabilisticCPA extends AbstractSingleWrapperCPA implements Statis
   @Override
   public void collectStatistics(Collection<Statistics> statsCollection) {
     if (!quantifyGrey) {
-      currentProbabilities.setGreyToRemainingUnexplored();
+      statistics.setGreyToRemainingUnexplored();
     }
-    statsCollection.add(currentProbabilities);
+    statsCollection.add(statistics);
   }
 
   private Collection<AbstractState> unwrapCollection(Collection<AbstractState> states) {

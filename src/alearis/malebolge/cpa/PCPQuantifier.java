@@ -45,6 +45,7 @@ import org.sosy_lab.common.configuration.InvalidConfigurationException;
 import org.sosy_lab.common.configuration.Option;
 import org.sosy_lab.common.configuration.Options;
 import org.sosy_lab.common.log.LogManager;
+import org.sosy_lab.common.time.Timer;
 import org.sosy_lab.cpachecker.cpa.constraints.constraint.Constraint;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicIdentifier;
 
@@ -60,21 +61,28 @@ public class PCPQuantifier implements ConstraintQuantifier {
   @Option(description = "model counter to be used. defaults to barvinok")
   private Counter counter = Counter.BARVINOK;
 
-  public enum Counter {BARVINOK, SHARPSAT}
+
+  public enum Counter {
+    BARVINOK,
+    SHARPSAT;
+  }
 
   private final PCPConnectionManager pcp;
   private final ShutdownNotifier shutdownNotifier;
   private final LoadingCache<Collection<Constraint>, CountResult> cache;
   private final LogManager logger;
   private final ExecutorService executor;
+  private final Timer timer;
 
   public PCPQuantifier(
       Configuration pConfig,
       ShutdownNotifier pShutdownNotifier,
-      LogManager logger) throws InvalidConfigurationException {
+      LogManager logger,
+      Timer timer) throws InvalidConfigurationException {
     pConfig.inject(this);
     shutdownNotifier = pShutdownNotifier;
     this.logger = logger;
+    this.timer = timer;
 
     try {
       String address;
@@ -126,10 +134,14 @@ public class PCPQuantifier implements ConstraintQuantifier {
     }
 
     logger.log(Level.FINEST, "PCP query: ", query.get());
-    CountResult result = pcp.count(query.get());
-
-    logger.log(Level.FINE, "PCP result: ", result);
-    return result;
+    timer.start();
+    try {
+      CountResult result = pcp.count(query.get());
+      logger.log(Level.FINE, "PCP result: ", result);
+      return result;
+    } finally {
+      timer.stop();
+    }
   }
 
 

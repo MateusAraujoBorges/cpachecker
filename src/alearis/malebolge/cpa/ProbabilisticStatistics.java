@@ -27,7 +27,9 @@ import alearis.malebolge.cpa.ProbabilisticState.Type;
 import alearis.malebolge.cpa.util.BigRational;
 import com.google.common.base.Preconditions;
 import java.io.PrintStream;
+import java.util.concurrent.TimeUnit;
 import org.checkerframework.checker.nullness.qual.Nullable;
+import org.sosy_lab.common.time.Timer;
 import org.sosy_lab.cpachecker.core.CPAcheckerResult.Result;
 import org.sosy_lab.cpachecker.core.interfaces.Statistics;
 import org.sosy_lab.cpachecker.core.reachedset.UnmodifiableReachedSet;
@@ -41,6 +43,8 @@ public class ProbabilisticStatistics implements Statistics {
   private BigRational failureProbability = BigRational.ZERO;
   private BigRational greyProbability = BigRational.ZERO;
   private BigRational smallestDomain = BigRational.ONE;
+
+  private Timer timeCounting = new Timer();
 
   private int nSuccessPaths = 0;
   private int nFailurePaths = 0;
@@ -79,7 +83,8 @@ public class ProbabilisticStatistics implements Statistics {
         .spacer()
         .put("#success paths", nSuccessPaths)
         .put("#failure paths", nFailurePaths)
-        .put("#grey    paths", nGreyPaths);
+        .put("#grey    paths", nGreyPaths)
+        .put("time spent counting ", timeCounting.getSumTime().formatAs(TimeUnit.SECONDS));
   }
 
   public boolean repOk() {
@@ -129,5 +134,9 @@ public class ProbabilisticStatistics implements Statistics {
   @Override
   public @Nullable String getName() {
     return name;
+  }
+
+  public Timer getTimeCounting() {
+    return timeCounting;
   }
 }
