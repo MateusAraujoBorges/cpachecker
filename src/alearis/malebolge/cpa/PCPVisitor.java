@@ -23,26 +23,14 @@
  */
 package alearis.malebolge.cpa;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.logging.Level;
 import javax.annotation.Nonnull;
 import org.sosy_lab.common.log.LogManager;
 import org.sosy_lab.cpachecker.cfa.types.Type;
-import org.sosy_lab.cpachecker.cfa.types.c.CSimpleType;
 import org.sosy_lab.cpachecker.cfa.types.c.CType;
-import org.sosy_lab.cpachecker.cpa.arg.ARGState;
-import org.sosy_lab.cpachecker.cpa.constraints.constraint.Constraint;
-import org.sosy_lab.cpachecker.cpa.constraints.domain.ConstraintsState;
-import org.sosy_lab.cpachecker.cpa.value.ValueAnalysisState;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.AdditionExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.AddressOfExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.BinaryAndExpression;
@@ -70,10 +58,8 @@ import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicExpression;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicIdentifier;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicValue;
 import org.sosy_lab.cpachecker.cpa.value.symbolic.type.SymbolicValueVisitor;
-import org.sosy_lab.cpachecker.cpa.value.symbolic.util.SymbolicIdentifierLocator;
 import org.sosy_lab.cpachecker.cpa.value.type.NumericValue;
 import org.sosy_lab.cpachecker.cpa.value.type.Value;
-import org.sosy_lab.cpachecker.util.AbstractStates;
 
 public class PCPVisitor implements SymbolicValueVisitor<String> {
 
@@ -129,7 +115,7 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
     }
   }
 
-  public String handleBinary(String op, BinarySymbolicExpression expr) {
+  private String handleBinary(String op, BinarySymbolicExpression expr) {
     String left = expr.getOperand1().accept(this);
     String right = expr.getOperand2().accept(this);
     return "(" + op + " " + left + " " + right + ")";
@@ -263,7 +249,7 @@ public class PCPVisitor implements SymbolicValueVisitor<String> {
 
   @Override
   public String visit(NegationExpression pExpression) {
-    return "(not " + pExpression.getOperand().accept(this) + ")";
+    return "(- " + pExpression.getOperand().accept(this) + ")";
   }
 
 }
