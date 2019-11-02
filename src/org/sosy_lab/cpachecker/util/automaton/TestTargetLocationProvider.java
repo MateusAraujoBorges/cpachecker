@@ -19,9 +19,8 @@
  */
 package org.sosy_lab.cpachecker.util.automaton;
 
-import static com.google.common.collect.FluentIterable.from;
+import static org.sosy_lab.common.collect.Collections3.transformedImmutableSetCopy;
 
-import com.google.common.base.Function;
 import com.google.common.collect.ImmutableSet;
 import java.util.Set;
 import org.sosy_lab.cpachecker.cfa.model.CFAEdge;
@@ -39,15 +38,6 @@ public class TestTargetLocationProvider implements TargetLocationProvider {
   @Override
   public ImmutableSet<CFANode> tryGetAutomatonTargetLocations(
       final CFANode pRootNode, final Specification pSpecification) {
-    return from(testTargets)
-        .transform(
-            new Function<CFAEdge, CFANode>() {
-
-              @Override
-              public CFANode apply(CFAEdge edge) {
-                return edge.getSuccessor();
-              }
-            })
-        .toSet();
+    return transformedImmutableSetCopy(testTargets, CFAEdge::getSuccessor);
   }
 }

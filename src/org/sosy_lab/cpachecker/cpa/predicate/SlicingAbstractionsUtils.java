@@ -24,7 +24,6 @@
 package org.sosy_lab.cpachecker.cpa.predicate;
 
 import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.collect.FluentIterable.from;
 import static org.sosy_lab.cpachecker.cpa.predicate.PredicateAbstractState.getPredicateState;
 
 import com.google.common.collect.FluentIterable;
@@ -56,7 +55,6 @@ import org.sosy_lab.cpachecker.cpa.arg.ARGReachedSet;
 import org.sosy_lab.cpachecker.cpa.arg.ARGState;
 import org.sosy_lab.cpachecker.cpa.arg.ARGUtils;
 import org.sosy_lab.cpachecker.cpa.arg.path.ARGPath;
-import org.sosy_lab.cpachecker.cpa.automaton.AutomatonState;
 import org.sosy_lab.cpachecker.cpa.dca.DCAState;
 import org.sosy_lab.cpachecker.cpa.predicate.BlockFormulaStrategy.BlockFormulas;
 import org.sosy_lab.cpachecker.cpa.slab.EdgeSet;
@@ -365,18 +363,10 @@ public class SlicingAbstractionsUtils {
             } else {
               // aggregateBasicBlocks is enabled!
               List<CFAEdge> edges = parent.getEdgesToChild(currentState);
-              assert edges.size() != 0;
+              assert !edges.isEmpty();
               currentBuilder = finishedBuilders.get(parent);
               for (CFAEdge e : edges) {
                 currentBuilder = currentBuilder.makeAnd(e);
-              }
-            }
-            AutomatonState automatonState =
-                AbstractStates.extractStateByType(currentState, AutomatonState.class);
-            if (automatonState != null) {
-              for (CExpression assumption : from(automatonState.getAssumptions())
-                  .filter(CExpression.class)) {
-                currentBuilder = currentBuilder.makeAnd(assumption);
               }
             }
             DCAState dcaState = AbstractStates.extractStateByType(currentState, DCAState.class);
@@ -394,7 +384,7 @@ public class SlicingAbstractionsUtils {
               // aggregateBasicBlocks is enabled!
               PathFormulaBuilder otherBuilder = finishedBuilders.get(parent);
               List<CFAEdge> edges = parent.getEdgesToChild(currentState);
-              assert edges.size() != 0;
+              assert !edges.isEmpty();
               for (CFAEdge e : edges) {
                 otherBuilder = otherBuilder.makeAnd(e);
               }
@@ -654,8 +644,8 @@ public class SlicingAbstractionsUtils {
             .filter(x -> isAbstractionState(x))
             .collect(Collectors.toList());
 
-    final Set<ARGState> statesOnErrorPath = new HashSet<>();
-    statesOnErrorPath.addAll(abstractionStatesOnErrorPath);
+    final Set<ARGState> statesOnErrorPath = new HashSet<>(abstractionStatesOnErrorPath);
+
     for (int i = 0; i< abstractionStatesOnErrorPath.size()-1;i++) {
       ARGState start = abstractionStatesOnErrorPath.get(i);
       ARGState stop = abstractionStatesOnErrorPath.get(i+1);
@@ -687,7 +677,7 @@ public class SlicingAbstractionsUtils {
   }
 
   public static void removeIncomingEdgesWithLocationMismatch(SLARGState state) {
-    if (state.isTarget() || state.getParents().size() == 0) {
+    if (state.isTarget() || state.getParents().isEmpty()) {
       return;
     }
     Set<CFANode> locations = getOutgoingLocations(state);
@@ -712,7 +702,7 @@ public class SlicingAbstractionsUtils {
   }
 
   public static void removeOutgoingEdgesWithLocationMismatch(SLARGState state) {
-    if (state.isTarget() || state.getParents().size() == 0) {
+    if (state.isTarget() || state.getParents().isEmpty()) {
       return;
     }
     Set<CFANode> locations = getIncomingLocations(state);
@@ -740,7 +730,7 @@ public class SlicingAbstractionsUtils {
   private static boolean blk(ARGState pState) {
 
     // if it is the root state, return true:
-    if (pState.getParents().size() == 0) {
+    if (pState.getParents().isEmpty()) {
       return true;
     }
     // if it is a target state, return true:

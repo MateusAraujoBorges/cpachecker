@@ -21,7 +21,9 @@
  *  CPAchecker web page:
  *    http://cpachecker.sosy-lab.org
  */
-package org.sosy_lab.cpachecker.core.algorithm.bmc;
+package org.sosy_lab.cpachecker.core.algorithm.bmc.pdr;
+
+import static org.sosy_lab.common.collect.Collections3.transformedImmutableSetCopy;
 
 import com.google.common.base.Function;
 import com.google.common.collect.FluentIterable;
@@ -83,9 +85,8 @@ public class TotalTransitionRelation {
       totalTransitionRelation.put(predecessorLocation.getNodeNumber(), partialTransitionRelation);
     }
     predecessorLocations =
-        FluentIterable.from(totalTransitionRelation.values())
-            .transform(t -> t.getStartLocation())
-            .toSet();
+        transformedImmutableSetCopy(
+            totalTransitionRelation.values(), PartialTransitionRelation::getStartLocation);
   }
 
   public CFANode getInitialLocation() {
@@ -220,7 +221,7 @@ public class TotalTransitionRelation {
             .anyMatch(predecessorLocations::contains);
   }
 
-  static String getLocationVariableName() {
+  public static String getLocationVariableName() {
     return LOCATION_VARIABLE_NAME;
   }
 

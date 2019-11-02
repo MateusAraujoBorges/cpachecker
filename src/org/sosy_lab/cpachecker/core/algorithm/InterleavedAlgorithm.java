@@ -206,7 +206,7 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
     }
 
     private final Path configFile;
-    private final int timeLimit;
+    private int timeLimit;
     private final REPETITIONMODE mode;
     private final Timer timer;
 
@@ -215,6 +215,7 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
     private Configuration config;
     private ShutdownManager localShutdownManager;
     private ReachedSet reached;
+    private double progress = -1.0;
 
     private AlgorithmContext(
         final AnnotatedValue<Path> pConfigFile, final Timer pTimer) {
@@ -295,6 +296,22 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
           || mode == REPETITIONMODE.REUSECPA_PREDPRECISION
           || mode == REPETITIONMODE.REUSECPA_OWNANDPREDPRECISION;
     }
+
+    public void resetProgress() {
+      progress = -1.0;
+    }
+
+    public void adaptTimeLimit(final int newTimeLimit) {
+      timeLimit = Math.max(DEFAULT_TIME_LIMIT, newTimeLimit);
+    }
+
+    public void setProgress(final double pProgress) {
+      progress = pProgress;
+    }
+
+    public double getProgress() {
+      return progress;
+    }
   }
 
   private static final int DEFAULT_TIME_LIMIT = 10;
@@ -314,6 +331,14 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
   )
   @FileOption(FileOption.Type.OPTIONAL_INPUT_FILE)
   private List<AnnotatedValue<Path>> configFiles;
+
+  @Option(
+    secure = true,
+    description =
+        "If adaptTimeLimits is set and all configurations support progress reports, "
+            + "in each cycle the time limits per configuration are newly calculated based on the progress"
+  )
+  private boolean adaptTimeLimits = false;
 
   public enum INTERMEDIATESTATSOPT {
     EXECUTE, NONE, PRINT
@@ -471,6 +496,12 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
             stats.noOfRounds++;
             logger.log(
                 Level.INFO, "InterleavedAlgorithm switches to the next interleave iteration...");
+            if (adaptTimeLimits) {
+              computeAndSetNewTimeLimits(algorithmContexts);
+            }
+            for (AlgorithmContext tempContext : algorithmContexts) {
+              tempContext.resetProgress();
+            }
           } else {
             stats.noOfCurrentAlgorithm++;
           }
@@ -585,6 +616,12 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
                 CPAs.closeCpaIfPossible(currentContext.cpa, logger);
               }
 
+              if (adaptTimeLimits
+                  && currentContext.algorithm instanceof ProgressReportingAlgorithm) {
+                currentContext.setProgress(
+                    ((ProgressReportingAlgorithm) currentContext.algorithm).getProgress());
+              }
+
               CPAs.closeIfPossible(currentContext.algorithm, logger);
             }
           }
@@ -668,7 +705,7 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
       throws InvalidConfigurationException, CPAException, InterruptedException {
 
     pCurrentContext.localShutdownManager = ShutdownManager.createWithParent(shutdownNotifier);
-    ArrayList<ResourceLimit> limits = new ArrayList<>();
+    List<ResourceLimit> limits = new ArrayList<>();
     try {
       limits.add(ProcessCpuTimeLimit.fromNowOn(TimeSpan.ofSeconds(pCurrentContext.timeLimit)));
     } catch (JMException e) {
@@ -789,7 +826,7 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
 
     Precision initialPrecision =
         pCpa.getInitialPrecision(pMainFunction, StateSpacePartition.getDefaultPartition());
-    if (previousReachedSets != null && previousReachedSets.size() > 0) {
+    if (previousReachedSets != null && !previousReachedSets.isEmpty()) {
       initialPrecision =
           aggregatePrecisionsForReuse(previousReachedSets, initialPrecision, pFMgr, pConfig);
     }
@@ -804,7 +841,7 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
       final Precision pInitialPrecision,
       final @Nullable FormulaManagerView pFMgr,
       final Configuration pConfig) {
-    Preconditions.checkArgument(pPreviousReachedSets.size() > 0);
+    Preconditions.checkArgument(!pPreviousReachedSets.isEmpty());
     Precision resultPrec = pInitialPrecision;
 
     PredicatePrecision predPrec;
@@ -926,6 +963,34 @@ public class InterleavedAlgorithm implements Algorithm, StatisticsProvider {
     }
 
     return trackedVariables;
+  }
+
+  private void computeAndSetNewTimeLimits(final List<AlgorithmContext> pAlgorithmContexts) {
+    long totalDistributableTimeBudget = 0;
+    double totalRelativeProgress = 0.0;
+    boolean mayAdapt = true;
+
+    for (AlgorithmContext context : pAlgorithmContexts) {
+      totalDistributableTimeBudget += context.timeLimit - DEFAULT_TIME_LIMIT;
+      totalRelativeProgress += (context.getProgress() / context.timeLimit);
+      mayAdapt &= context.getProgress() >= 0;
+    }
+
+    if (totalDistributableTimeBudget <= pAlgorithmContexts.size() || totalRelativeProgress <= 0) {
+      mayAdapt = false;
+    }
+
+    for (AlgorithmContext context : pAlgorithmContexts) {
+      if (mayAdapt) {
+        context.adaptTimeLimit(
+        DEFAULT_TIME_LIMIT
+            + (int)
+                Math.round(
+                    ((context.getProgress() / context.timeLimit) / totalRelativeProgress)
+                        * totalDistributableTimeBudget));
+      }
+      context.resetProgress();
+    }
   }
 
   @Override

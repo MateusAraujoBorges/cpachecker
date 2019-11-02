@@ -21,8 +21,9 @@
  *  CPAchecker web page:
  *    http://cpachecker.sosy-lab.org
  */
-package org.sosy_lab.cpachecker.core.algorithm.bmc;
+package org.sosy_lab.cpachecker.core.algorithm.bmc.pdr;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.collect.FluentIterable.from;
 import static org.sosy_lab.cpachecker.core.algorithm.bmc.BMCHelper.filterAncestors;
@@ -68,13 +69,28 @@ import org.sosy_lab.cpachecker.core.AnalysisDirection;
 import org.sosy_lab.cpachecker.core.CPAcheckerResult.Result;
 import org.sosy_lab.cpachecker.core.Specification;
 import org.sosy_lab.cpachecker.core.algorithm.Algorithm;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.AbstractionBasedLifting;
 import org.sosy_lab.cpachecker.core.algorithm.bmc.AbstractionBasedLifting.LiftingAbstractionFailureStrategy;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.AbstractionStrategy;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.AssertCandidate;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.BMCAlgorithm;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.BMCHelper;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.CandidateGenerator;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.InductionResult;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.InvariantStrengthening;
 import org.sosy_lab.cpachecker.core.algorithm.bmc.InvariantStrengthening.NextCti;
-import org.sosy_lab.cpachecker.core.algorithm.bmc.PartialTransitionRelation.CtiWithInputs;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.InvariantStrengthenings;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.Lifting;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.PredicateAbstractionStrategy;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.ProverEnvironmentWithFallback;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.StandardLiftings;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.StaticCandidateProvider;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.UnrolledReachedSet;
 import org.sosy_lab.cpachecker.core.algorithm.bmc.candidateinvariants.CandidateInvariant;
 import org.sosy_lab.cpachecker.core.algorithm.bmc.candidateinvariants.SymbolicCandiateInvariant;
-import org.sosy_lab.cpachecker.core.algorithm.bmc.candidateinvariants.TargetLocationCandidateInvariant;
 import org.sosy_lab.cpachecker.core.algorithm.bmc.candidateinvariants.SymbolicCandiateInvariant.BlockedCounterexampleToInductivity;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.candidateinvariants.TargetLocationCandidateInvariant;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.pdr.PartialTransitionRelation.CtiWithInputs;
 import org.sosy_lab.cpachecker.core.algorithm.invariants.AbstractInvariantGenerator;
 import org.sosy_lab.cpachecker.core.algorithm.invariants.InvariantGenerator;
 import org.sosy_lab.cpachecker.core.algorithm.invariants.InvariantSupplier;
@@ -269,7 +285,7 @@ public class PdrAlgorithm implements Algorithm {
     // Successfully proven invariants are removed from the set.
     final CandidateGenerator candidateGenerator = getCandidateInvariants();
     if (!candidateGenerator.produceMoreCandidates()) {
-      for (AbstractState state : from(rawBmcReachedSet.getWaitlist()).toList()) {
+      for (AbstractState state : ImmutableList.copyOf(rawBmcReachedSet.getWaitlist())) {
         rawBmcReachedSet.removeOnlyFromWaitlist(state);
       }
       return AlgorithmStatus.SOUND_AND_PRECISE;
@@ -1025,10 +1041,9 @@ public class PdrAlgorithm implements Algorithm {
       UnrolledReachedSet pBmcReachedSet,
       ProverEnvironmentWithFallback pCexProver)
       throws InterruptedException, CPAException, SolverException {
-    if (pObligation.getFrameIndex() != 0) {
-      throw new IllegalArgumentException(
-          "Bounded model check should only be called for obligations at frame index zero.");
-    }
+    checkArgument(
+        pObligation.getFrameIndex() == 0,
+        "Bounded model check should only be called for obligations at frame index zero.");
 
     CandidateInvariant violatedCandidate = pObligation.getViolatedInvariant();
     ReachedSet reached = pBmcReachedSet.getReachedSet();

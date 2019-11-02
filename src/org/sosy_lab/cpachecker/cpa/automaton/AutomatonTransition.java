@@ -24,6 +24,7 @@
 package org.sosy_lab.cpachecker.cpa.automaton;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Strings.isNullOrEmpty;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Collections2;
@@ -289,7 +290,7 @@ class AutomatonTransition {
         pArgs.getLogger().log(Level.SEVERE, res.getFailureMessage() + " in " + res.getFailureOrigin());
       }
     }
-    if (pArgs.getLogMessage() != null && pArgs.getLogMessage().length() > 0) {
+    if (!isNullOrEmpty(pArgs.getLogMessage())) {
       pArgs.getLogger().log(Level.INFO, pArgs.getLogMessage());
       pArgs.clearLogMessage();
     }
@@ -312,6 +313,10 @@ class AutomatonTransition {
    */
   public AutomatonInternalState getFollowState() {
     return followState;
+  }
+
+  String getFollowStateName() {
+    return followStateName;
   }
 
   public AutomatonBoolExpr getTrigger() {
@@ -429,7 +434,7 @@ class AutomatonTransition {
   }
 
   public boolean isTransitionWithAssumptions() {
-    return assumptions.size() > 0;
+    return !assumptions.isEmpty();
   }
 
   public boolean nontriviallyMatches(final CFAEdge pEdge, final LogManager pLogger) {

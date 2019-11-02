@@ -21,7 +21,9 @@
  *  CPAchecker web page:
  *    http://cpachecker.sosy-lab.org
  */
-package org.sosy_lab.cpachecker.core.algorithm.bmc;
+package org.sosy_lab.cpachecker.core.algorithm.bmc.pdr;
+
+import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
@@ -37,12 +39,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.sosy_lab.cpachecker.core.algorithm.bmc.ProverEnvironmentWithFallback;
 import org.sosy_lab.cpachecker.core.algorithm.bmc.candidateinvariants.CandidateInvariant;
 import org.sosy_lab.cpachecker.core.algorithm.bmc.candidateinvariants.CandidateInvariantCombination;
 import org.sosy_lab.cpachecker.util.predicates.smt.Solver;
 import org.sosy_lab.java_smt.api.SolverContext.ProverOptions;
 
-public class FrameSet implements AutoCloseable {
+class FrameSet implements AutoCloseable {
 
   private final Solver solver;
 
@@ -88,7 +91,7 @@ public class FrameSet implements AutoCloseable {
             i -> {
               Iterable<? extends Object> result = frames.get(i);
               if (i == 0) {
-                result = Iterables.concat(Collections.singleton("I"), result);
+                result = Iterables.concat(ImmutableSet.of("I"), result);
               }
               return result;
             })
@@ -127,9 +130,7 @@ public class FrameSet implements AutoCloseable {
   }
 
   public void addFrameClause(int pFrameIndex, CandidateInvariant pClause) {
-    if (pFrameIndex > getFrontierIndex()) {
-      throw new IllegalArgumentException("To push the frontier, use pushFrontier");
-    }
+    checkArgument(pFrameIndex <= getFrontierIndex(), "To push the frontier, use pushFrontier");
     Set<CandidateInvariant> frame = frames.get(pFrameIndex);
     boolean added = false;
     for (CandidateInvariant clauseComponent :
@@ -205,6 +206,6 @@ public class FrameSet implements AutoCloseable {
 
   public boolean isConfirmed(CandidateInvariant pRootInvariant) {
     int index = getFrontierIndex(pRootInvariant);
-    return IntStream.range(1, index).filter(emptyFrames::contains).findAny().isPresent();
+    return IntStream.range(1, index).anyMatch(emptyFrames::contains);
   }
 }

@@ -3,6 +3,10 @@ include: /build/gitlab-ci.yml
 variables:
   PROJECT_PATH: "sosy-lab/software/cpachecker"
   GH_REF: "github.com/sosy-lab/cpachecker"
+  # Version of https://gitlab.com/sosy-lab/software/refaster/ to use
+  REFASTER_REPO_REVISION: 7f894bc18c3dcd5f19a7b8f59fb4cada8c331984
+  # Needs to be synchronized with Error Prone version in lib/ivy.xml
+  REFASTER_VERSION: 2.3.3
 
 
 .binary_check: &binary_check
@@ -22,6 +26,9 @@ configuration-checks:jdk-8:
   dependencies:
     - build-dependencies
     - build:jdk-8
+  needs:
+    - build-dependencies
+    - build:jdk-8
   image: ${CI_REGISTRY_IMAGE}/test:jdk-8
 
 configuration-checks:jdk-11:
@@ -29,11 +36,17 @@ configuration-checks:jdk-11:
   dependencies:
     - build-dependencies
     - build:jdk-11
+  needs:
+    - build-dependencies
+    - build:jdk-11
   image: ${CI_REGISTRY_IMAGE}/test:jdk-11
 
 configuration-checks:jdk-12:
   <<: *configuration-checks
   dependencies:
+    - build-dependencies
+    - build:jdk-12
+  needs:
     - build-dependencies
     - build:jdk-12
   image: ${CI_REGISTRY_IMAGE}/test:jdk-12
@@ -46,6 +59,9 @@ configuration-documentation:
     - "ant $ANT_PROPS_CHECKS build-documentation"
     - "diff doc/ConfigurationOptions.txt.old doc/ConfigurationOptions.txt"
   dependencies:
+    - build-dependencies
+    - build:jdk-11
+  needs:
     - build-dependencies
     - build:jdk-11
 
@@ -72,6 +88,9 @@ python-unit-tests:jdk-8:
   dependencies:
     - build-dependencies
     - build:jdk-8
+  needs:
+    - build-dependencies
+    - build:jdk-8
   image: ${CI_REGISTRY_IMAGE}/test:jdk-8
 
 python-unit-tests:jdk-11:
@@ -79,11 +98,17 @@ python-unit-tests:jdk-11:
   dependencies:
     - build-dependencies
     - build:jdk-11
+  needs:
+    - build-dependencies
+    - build:jdk-11
   image: ${CI_REGISTRY_IMAGE}/test:jdk-11
 
 python-unit-tests:jdk-12:
   <<: *python-unit-tests
   dependencies:
+    - build-dependencies
+    - build:jdk-12
+  needs:
     - build-dependencies
     - build:jdk-12
   image: ${CI_REGISTRY_IMAGE}/test:jdk-12
@@ -103,7 +128,7 @@ javascript-unit-tests:
     - "src/org/sosy_lab/cpachecker/core/counterexample/node_modules/"
   artifacts:
     paths:
-      - src/org/sosy_lab/cpachecker/core/counterexample/unit_testing_report
+      - src/org/sosy_lab/cpachecker/core/counterexample/unit_testing_report.html
     when: always
 
 
@@ -118,13 +143,16 @@ javascript-e2e-tests:
   dependencies:
     - build-dependencies
     - build:jdk-11
+  needs:
+    - build-dependencies
+    - build:jdk-11
   image: ${CI_REGISTRY_IMAGE}/test:java-node
   before_script:
       # generate example report
     - scripts/cpa.sh -predicateAnalysis test/programs/simple/SSAMap-bug_false-unreach-label.c
     - cd src/org/sosy_lab/cpachecker/core/counterexample/
     - npm install
-    - ./node_modules/protractor/node_modules/webdriver-manager/bin/webdriver-manager update
+    - "./node_modules/protractor/node_modules/webdriver-manager/bin/webdriver-manager update --versions.chrome $(dpkg-query --showformat='${Version}' --show chromium-browser)"
   script:
     - npm run e2e-test
   cache:

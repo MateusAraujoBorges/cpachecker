@@ -32,7 +32,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -319,9 +318,7 @@ public class CustomInstructionTest {
           startNode = node;
         }
         if (((CLabelNode) node).getLabel().startsWith("end_ci")) {
-          for(CFANode predecessor: CFAUtils.allPredecessorsOf(node)) {
-            endNodes.add(predecessor);
-          }
+          CFAUtils.allPredecessorsOf(node).copyInto(endNodes);
         }
       }
       for (CFAEdge e : CFAUtils.allLeavingEdges(node)) {
@@ -428,7 +425,7 @@ public class CustomInstructionTest {
         new AppliedCustomInstruction(
             startNode,
             endNodes,
-            Collections.singletonList("main::a"),
+            ImmutableList.of("main::a"),
             ImmutableList.of(),
             inputVarsAndConstants,
             Pair.of(ImmutableList.of(), ""),

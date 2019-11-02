@@ -25,6 +25,7 @@ package org.sosy_lab.cpachecker.cpa.ldd;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -87,7 +88,7 @@ public class LDDAbstractionTransferRelation extends SingleEdgeTransferRelation {
     if (region == null || region.isFalse()) {
       return ImmutableList.of();
     }
-    return Collections.singleton(new LDDAbstractState(region));
+    return ImmutableSet.of(new LDDAbstractState(region));
   }
 
   /**
@@ -268,9 +269,7 @@ public class LDDAbstractionTransferRelation extends SingleEdgeTransferRelation {
         region = substituteByTerm(variable, term, constant, previousRegion);
       } else {
         term.put(variable, 1);
-        for (String var : term.keySet()) {
-          this.usedVars.add(var);
-        }
+        this.usedVars.addAll(term.keySet());
         region = this.regionManager.makeAnd(previousRegion, toConstantAssignmentRegion(term, constant));
       }
       return region;

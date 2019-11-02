@@ -183,10 +183,10 @@ class ExplicitValueVisitor extends AbstractExpressionValueVisitor {
   private SMGValueAndState getStateAndAddRestForLater(
       final List<? extends SMGValueAndState> valueAndStates) {
     final SMGValueAndState valueAndState;
-    if (valueAndStates.size() > 0) {
+    if (!valueAndStates.isEmpty()) {
       valueAndState = valueAndStates.get(0);
     } else {
-      valueAndState = SMGValueAndState.of(getState());
+      valueAndState = SMGValueAndState.withUnknownValue(getState());
     }
 
     for (int c = 1; c < valueAndStates.size(); c++) {

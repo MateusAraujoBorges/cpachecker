@@ -85,7 +85,12 @@ public class CLangSMGTest {
     SMGValue val2 = SMGKnownExpValue.valueOf(2);
 
     SMGEdgePointsTo pt = new SMGEdgePointsTo(val1, obj1, 0);
-    SMGEdgeHasValue hv = new SMGEdgeHasValue(CNumericTypes.UNSIGNED_LONG_INT, 0, obj2, val2);
+    SMGEdgeHasValue hv =
+        new SMGEdgeHasValue(
+            smg.getMachineModel().getSizeofInBits(CNumericTypes.UNSIGNED_LONG_INT),
+            0,
+            obj2,
+            val2);
 
     smg.addValue(val1);
     smg.addValue(val2);
@@ -365,8 +370,7 @@ public class CLangSMGTest {
     SMGValue some_value = SMGKnownExpValue.valueOf(5);
     CType type = mock(CType.class);
     when(type.getCanonicalType()).thenReturn(type);
-    SMGEdgeHasValue edge = new SMGEdgeHasValue(type, 0, null_object, some_value);
-
+    SMGEdgeHasValue edge = new SMGEdgeHasValue(32, 0, null_object, some_value);
     smg.addValue(some_value);
     smg.addHasValueEdge(edge);
     assertThat(CLangSMGConsistencyVerifier.verifyCLangSMG(logger, smg)).isFalse();

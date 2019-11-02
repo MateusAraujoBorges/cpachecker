@@ -24,6 +24,7 @@
 package org.sosy_lab.cpachecker.cpa.automaton;
 
 import static com.google.common.collect.FluentIterable.from;
+import static org.sosy_lab.common.collect.Collections3.transformedImmutableListCopy;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
@@ -746,7 +747,7 @@ public class ARGToAutomatonConverter {
       if (!finished.add(s)) {
         continue;
       }
-      if (s.getChildren().size() > 1 || s.getChildren().size() == 0) {
+      if (s.getChildren().size() > 1 || s.getChildren().isEmpty()) {
         // branching-points and end-states are important
         next.add(s);
       } else {
@@ -758,7 +759,7 @@ public class ARGToAutomatonConverter {
 
   private static Iterable<ARGState> getLeaves(ARGState pRoot, boolean targetsOnly) {
     FluentIterable<ARGState> leaves =
-        from(pRoot.getSubgraph()).filter(s -> (s.getChildren().size() == 0) && !s.isCovered());
+        from(pRoot.getSubgraph()).filter(s -> s.getChildren().isEmpty() && !s.isCovered());
     return targetsOnly ? leaves.filter(ARGState::isTarget) : leaves;
   }
 
@@ -812,7 +813,7 @@ public class ARGToAutomatonConverter {
       callstackToLeaves.put(callstack, leaf);
       if (AbstractStates.projectToType(
               AbstractStates.asIterable(leaf), AbstractStateWithAssumptions.class)
-          .anyMatch(x -> x.getPreconditionAssumptions().size() > 0)) {
+          .anyMatch(x -> !x.getPreconditionAssumptions().isEmpty())) {
         callstackToLeafWithPreAssumptions.put(callstack, leaf);
       }
       CallstackState prev = callstack.getPreviousState();
@@ -850,7 +851,7 @@ public class ARGToAutomatonConverter {
       }
       final List<AutomatonTransition> transitions = new ArrayList<>();
       for (ARGState leaf : callstackToLeaves.get(elem)) {
-        if (assumptions.size() == 0) {
+        if (assumptions.isEmpty()) {
           // no assumptions, proceed normally:
           transitions.add(
               makeLocationTransition(
@@ -864,14 +865,12 @@ public class ARGToAutomatonConverter {
               makeLocationTransition(
                   AbstractStates.extractLocation(parent).getNodeNumber(), id(parent), assumptions));
           try {
-          transitions.add(
-              makeLocationTransition(
-                  AbstractStates.extractLocation(parent).getNodeNumber(),
-                  id(elem),
-                  assumptions
-                      .stream()
-                      .map(x -> negateExpression((CExpression) x))
-                      .collect(ImmutableList.toImmutableList())));
+            transitions.add(
+                makeLocationTransition(
+                    AbstractStates.extractLocation(parent).getNodeNumber(),
+                    id(elem),
+                    transformedImmutableListCopy(
+                        assumptions, x -> negateExpression((CExpression) x))));
           } catch (ClassCastException e) {
             throw new AssertionError(
                 "Currently there is only support for negating CExpressions", e);

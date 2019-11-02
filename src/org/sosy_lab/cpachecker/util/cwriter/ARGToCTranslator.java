@@ -376,7 +376,7 @@ public class ARGToCTranslator {
     // find the next elements to add to the waitlist
     Collection<ARGState> childrenOfElement = currentElement.getChildren();
 
-    if (childrenOfElement.size() == 0) {
+    if (childrenOfElement.isEmpty()) {
       // if there is no child of the element, maybe it was covered by other?
       if(currentElement.isCovered()) {
         // it was indeed covered; jump to element it was covered by
@@ -473,8 +473,8 @@ public class ARGToCTranslator {
             .stream()
             .allMatch(x -> (currentElement.getEdgeToChild(x) instanceof CAssumeEdge))) {
 
-      //collect edges of condition branch
-      ArrayList<ARGEdge> result = new ArrayList<>(2);
+      // collect edges of condition branch
+      List<ARGEdge> result = new ArrayList<>(2);
       int ind = 0;
       boolean previousTruthAssumption = false;
       String elseCond = null;
@@ -1094,7 +1094,7 @@ public class ARGToCTranslator {
             waitlist.push(Pair.of(child, decInfo));
           }
 
-          if (child.isCovered() || child.getParents().size() > 0) {
+          if (child.isCovered() || !child.getParents().isEmpty()) {
             decProblems.put(getCovering(child), decInfo.currentFuncDecInfo);
           }
         }
@@ -1134,7 +1134,7 @@ public class ARGToCTranslator {
         }
       }
 
-      if (probVars.size() > 0) {
+      if (!probVars.isEmpty()) {
         probVarDec.put(key, probVars);
       }
     }

@@ -226,7 +226,7 @@ public class AppliedCustomInstructionParser {
     return builder.build();
   }
 
-  protected CustomInstruction readCustomInstruction(final String functionName)
+  public CustomInstruction readCustomInstruction(final String functionName)
       throws InterruptedException, AppliedCustomInstructionParsingFailedException {
     FunctionEntryNode function = cfa.getFunctionHead(functionName);
 
@@ -288,9 +288,7 @@ public class AppliedCustomInstructionParser {
 
       // pred is endNode of CI -> store pred in Collection of endNodes
       if (pred instanceof CLabelNode && ((CLabelNode)pred).getLabel().startsWith("end_ci_")) {
-        for (CFANode endNode : CFAUtils.predecessorsOf(pred)) {
-          ciEndNodes.add(endNode);
-        }
+        CFAUtils.predecessorsOf(pred).copyInto(ciEndNodes);
         continue;
       }
 
@@ -332,12 +330,12 @@ public class AppliedCustomInstructionParser {
       throw new AppliedCustomInstructionParsingFailedException("Missing label for end of custom instruction");
     }
 
-    List<String> outputVariablesAsList = new ArrayList<>();
-    outputVariablesAsList.addAll(outputVariables);
+    List<String> outputVariablesAsList = new ArrayList<>(outputVariables);
+
     Collections.sort(outputVariablesAsList);
 
-    List<String> inputVariablesAsList = new ArrayList<>();
-    inputVariablesAsList.addAll(inputVariables);
+    List<String> inputVariablesAsList = new ArrayList<>(inputVariables);
+
     Collections.sort(inputVariablesAsList);
 
     return new CustomInstruction(ciStartNode, ciEndNodes, inputVariablesAsList, outputVariablesAsList, shutdownNotifier);
@@ -659,4 +657,11 @@ public class AppliedCustomInstructionParser {
 
   }
 
+  public boolean isAppliedCI(final CustomInstruction pCi, final CFANode pNode) {
+    try {
+      return pCi.inspectAppliedCustomInstruction(pNode) != null;
+    } catch (AppliedCustomInstructionParsingFailedException | InterruptedException e) {
+      return false;
+    }
+  }
 }

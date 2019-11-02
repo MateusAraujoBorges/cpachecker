@@ -23,6 +23,7 @@
  */
 package org.sosy_lab.cpachecker.cpa.arg.witnessexport;
 
+import static com.google.common.base.Strings.nullToEmpty;
 import static com.google.common.collect.FluentIterable.from;
 import static org.sosy_lab.cpachecker.util.AbstractStates.extractStateByType;
 import static org.sosy_lab.cpachecker.util.automaton.AutomatonGraphmlCommon.SINK_NODE_ID;
@@ -53,6 +54,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -62,16 +64,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.BiPredicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import javax.xml.parsers.ParserConfigurationException;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.sosy_lab.cpachecker.cfa.CFA;
 import org.sosy_lab.cpachecker.cfa.ast.AExpression;
@@ -121,6 +124,7 @@ import org.sosy_lab.cpachecker.cpa.threading.ThreadingState;
 import org.sosy_lab.cpachecker.cpa.threading.ThreadingTransferRelation;
 import org.sosy_lab.cpachecker.exceptions.NoException;
 import org.sosy_lab.cpachecker.util.AbstractStates;
+import org.sosy_lab.cpachecker.util.BiPredicates;
 import org.sosy_lab.cpachecker.util.CFATraversal;
 import org.sosy_lab.cpachecker.util.CFATraversal.CFAVisitor;
 import org.sosy_lab.cpachecker.util.CFATraversal.TraversalProcess;
@@ -129,11 +133,8 @@ import org.sosy_lab.cpachecker.util.NumericIdProvider;
 import org.sosy_lab.cpachecker.util.Pair;
 import org.sosy_lab.cpachecker.util.automaton.AutomatonGraphmlCommon;
 import org.sosy_lab.cpachecker.util.automaton.AutomatonGraphmlCommon.AssumeCase;
-import org.sosy_lab.cpachecker.util.automaton.AutomatonGraphmlCommon.ElementType;
-import org.sosy_lab.cpachecker.util.automaton.AutomatonGraphmlCommon.GraphMlBuilder;
 import org.sosy_lab.cpachecker.util.automaton.AutomatonGraphmlCommon.KeyDef;
 import org.sosy_lab.cpachecker.util.automaton.AutomatonGraphmlCommon.NodeFlag;
-import org.sosy_lab.cpachecker.util.automaton.AutomatonGraphmlCommon.NodeType;
 import org.sosy_lab.cpachecker.util.automaton.AutomatonGraphmlCommon.WitnessType;
 import org.sosy_lab.cpachecker.util.automaton.VerificationTaskMetaData;
 import org.sosy_lab.cpachecker.util.expressions.ExpressionTree;
@@ -142,9 +143,8 @@ import org.sosy_lab.cpachecker.util.expressions.ExpressionTrees;
 import org.sosy_lab.cpachecker.util.expressions.LeafExpression;
 import org.sosy_lab.cpachecker.util.expressions.Or;
 import org.sosy_lab.cpachecker.util.expressions.Simplifier;
-import org.w3c.dom.Element;
 
-class WitnessWriter implements EdgeAppender {
+class WitnessFactory implements EdgeAppender {
 
   private static final EnumSet<KeyDef> INSUFFICIENT_KEYS =
       EnumSet.of(
@@ -304,6 +304,8 @@ class WitnessWriter implements EdgeAppender {
   private final Set<String> invariantExportStates = new TreeSet<>();
 
   private final Map<Edge, CFANode> loopHeadEnteringEdges = new HashMap<>();
+  private final Multimap<String, ARGState> stateToARGStates = LinkedHashMultimap.create();
+  private final Multimap<Edge, CFAEdge> edgeToCFAEdges = LinkedHashMultimap.create();
 
   private final String defaultSourcefileName;
   private final WitnessType graphType;
@@ -319,7 +321,7 @@ class WitnessWriter implements EdgeAppender {
   private final Multimap<String, ASimpleDeclaration> seenDeclarations = HashMultimap.create();
   protected Set<AdditionalInfoConverter> additionalInfoConverters = ImmutableSet.of();
 
-  WitnessWriter(
+  WitnessFactory(
       WitnessOptions pOptions,
       CFA pCfa,
       VerificationTaskMetaData pMetaData,
@@ -348,6 +350,9 @@ class WitnessWriter implements EdgeAppender {
       final CFAEdgeWithAdditionalInfo pAdditionalInfo) {
 
     attemptSwitchToFunctionScope(pEdge);
+    if (pFromState.isPresent()) {
+      stateToARGStates.putAll(pFrom, pFromState.get());
+    }
 
     Iterable<TransitionCondition> transitions =
         constructTransitionCondition(pFrom, pTo, pEdge, pFromState, pValueMap, pAdditionalInfo);
@@ -381,17 +386,18 @@ class WitnessWriter implements EdgeAppender {
           if (exportInvariant) {
             invariantExportStates.add(to);
           }
-          if (exportInvariant || isEdgeRedundant.apply(edge)) {
+          if (exportInvariant || isEdgeIrrelevant.apply(edge)) {
             invariant =
                 simplifier.simplify(invariantProvider.provideInvariantFor(pEdge, pFromState));
           }
-          putStateInvariant(pTo, invariant);
+          addToStateInvariant(pTo, invariant);
           String functionName = pEdge.getSuccessor().getFunctionName();
           stateScopes.put(pTo, isFunctionScope ? functionName : "");
         }
       }
 
       putEdge(edge);
+      edgeToCFAEdges.put(edge, pEdge);
       from = to;
       ++i;
     }
@@ -543,33 +549,36 @@ class WitnessWriter implements EdgeAppender {
       }
     }
 
-    Optional<FileLocation> minFileLocation = AutomatonGraphmlCommon.getMinFileLocation(pEdge, cfa
-        .getMainFunction(), pAdditionalInfo);
-    Optional<FileLocation> maxFileLocation = AutomatonGraphmlCommon.getMaxFileLocation(pEdge, cfa
-        .getMainFunction(), pAdditionalInfo);
-    if (witnessOptions.exportLineNumbers() && minFileLocation.isPresent()) {
-      FileLocation min = minFileLocation.get();
+    final Set<FileLocation> locations =
+        AutomatonGraphmlCommon.getFileLocationsFromCfaEdge(
+            pEdge, cfa.getMainFunction(), pAdditionalInfo);
+    // TODO This ignores file names, does this make sense? Replace with natural order?
+    final Comparator<FileLocation> nodeOffsetComparator =
+        Comparator.comparingInt(FileLocation::getNodeOffset);
+    final FileLocation min =
+        locations.isEmpty() ? null : Collections.min(locations, nodeOffsetComparator);
+    final FileLocation max =
+        locations.isEmpty() ? null : Collections.max(locations, nodeOffsetComparator);
+
+    if (witnessOptions.exportLineNumbers() && min != null) {
       if (witnessOptions.exportSourceFileName()
           || !min.getFileName().equals(defaultSourcefileName)) {
         result = result.putAndCopy(KeyDef.ORIGINFILE, min.getFileName());
       }
       result = result.putAndCopy(KeyDef.STARTLINE, Integer.toString(min.getStartingLineInOrigin()));
     }
-    if (witnessOptions.exportLineNumbers() && maxFileLocation.isPresent()) {
-      FileLocation max = maxFileLocation.get();
+    if (witnessOptions.exportLineNumbers() && max != null) {
       result = result.putAndCopy(KeyDef.ENDLINE, Integer.toString(max.getEndingLineInOrigin()));
     }
 
-    if (witnessOptions.exportOffset() && minFileLocation.isPresent()) {
-      FileLocation min = minFileLocation.get();
+    if (witnessOptions.exportOffset() && min != null && min.isOffsetRelatedToOrigin()) {
       if (witnessOptions.exportSourceFileName()
           || !min.getFileName().equals(defaultSourcefileName)) {
         result = result.putAndCopy(KeyDef.ORIGINFILE, min.getFileName());
       }
       result = result.putAndCopy(KeyDef.OFFSET, Integer.toString(min.getNodeOffset()));
     }
-    if (witnessOptions.exportOffset() && maxFileLocation.isPresent()) {
-      FileLocation max = maxFileLocation.get();
+    if (witnessOptions.exportOffset() && max != null && max.isOffsetRelatedToOrigin()) {
       result =
           result.putAndCopy(
               KeyDef.ENDOFFSET, Integer.toString(max.getNodeOffset() + max.getNodeLength() - 1));
@@ -599,7 +608,7 @@ class WitnessWriter implements EdgeAppender {
   /**
    * Method is used for additional check if TransitionCondition.empty() is applicable.
    *
-   * @param pAdditionalInfo is used at {@link ExtendedWitnessWriter}
+   * @param pAdditionalInfo is used at {@link ExtendedWitnessFactory}
    * @return true if TransitionCondition.empty is applicable.
    */
   protected boolean isEmptyTransitionPossible(CFAEdgeWithAdditionalInfo pAdditionalInfo) {
@@ -889,7 +898,7 @@ class WitnessWriter implements EdgeAppender {
   }
 
   /**
-   * Overwritten at {@link ExtendedWitnessWriter}
+   * Overwritten at {@link ExtendedWitnessFactory}
    *
    * @param pCondition current {@link TransitionCondition}
    * @param pAdditionalInfo exported additional info
@@ -1017,46 +1026,41 @@ class WitnessWriter implements EdgeAppender {
   }
 
   /**
-   * Starting from the given initial ARG state, collects that state and all
-   * transitive successors (as defined by the successor function) that are
-   * children of their direct predecessor and are accepted by the path state
-   * predicate.
+   * Starting from the given initial ARG state, collects that state and all transitive successors
+   * (as defined by the successor function) that are children of their direct predecessor and are
+   * accepted by the path state predicate.
    *
    * @param pInitialState the initial ARG state.
-   * @param pSuccessorFunction the function defining the successors of a
-   * state.
+   * @param pSuccessorFunction the function defining the successors of a state.
    * @param pPathStates a filter on the nodes.
    * @param pIsRelevantEdge a filter on the successor function.
-   *
    * @return the parents with their children.
    */
-  private Iterable<ARGState> collectPathNodes(
-      final ARGState pInitialState,
-      final Function<? super ARGState, ? extends Iterable<ARGState>> pSuccessorFunction,
-      final Predicate<? super ARGState> pPathStates, Predicate<? super Pair<ARGState, ARGState>> pIsRelevantEdge) {
-    return Iterables.transform(
-        collectPathEdges(pInitialState, pSuccessorFunction, pPathStates, pIsRelevantEdge), Pair::getFirst);
-  }
-
-  /**
-   * Starting from the given initial ARG state, collects that state and all
-   * transitive successors (as defined by the successor function) that are
-   * children of their direct predecessor. Children are only computed for
-   * nodes that are accepted by the path state predicate.
-   *
-   * @param pInitialState the initial ARG state.
-   * @param pSuccessorFunction the function defining the successors of a
-   * state.
-   * @param pPathStates a filter on the parent nodes.
-   * @param pIsRelevantEdge a filter on the successor function.
-   *
-   * @return the parents with their children.
-   */
-  private Iterable<Pair<ARGState, Iterable<ARGState>>> collectPathEdges(
+  private Iterable<ARGState> collectReachableNodes(
       final ARGState pInitialState,
       final Function<? super ARGState, ? extends Iterable<ARGState>> pSuccessorFunction,
       final Predicate<? super ARGState> pPathStates,
-      final Predicate<? super Pair<ARGState, ARGState>> pIsRelevantEdge) {
+      final BiPredicate<ARGState, ARGState> pIsRelevantEdge) {
+    return Iterables.transform(
+        collectReachableEdges(pInitialState, pSuccessorFunction, pPathStates, pIsRelevantEdge), Pair::getFirst);
+  }
+
+  /**
+   * Starting from the given initial ARG state, collects that state and all transitive successors
+   * (as defined by the successor function) that are children of their direct predecessor. Children
+   * are only computed for nodes that are accepted by the path state predicate.
+   *
+   * @param pInitialState the initial ARG state.
+   * @param pSuccessorFunction the function defining the successors of a state.
+   * @param pPathStates a filter on the parent nodes.
+   * @param pIsRelevantEdge a filter on the successor function.
+   * @return the parents with their children.
+   */
+  private Iterable<Pair<ARGState, Iterable<ARGState>>> collectReachableEdges(
+      final ARGState pInitialState,
+      final Function<? super ARGState, ? extends Iterable<ARGState>> pSuccessorFunction,
+      final Predicate<? super ARGState> pPathStates,
+      final BiPredicate<ARGState, ARGState> pIsRelevantEdge) {
     return new Iterable<Pair<ARGState, Iterable<ARGState>>>() {
 
       private final Set<ARGState> visited = new HashSet<>();
@@ -1094,7 +1098,7 @@ class WitnessWriter implements EdgeAppender {
 
             // Only the children on the path become parents themselves
             for (ARGState child : children.filter(pPathStates)) {
-              if (pIsRelevantEdge.apply(Pair.of(parent, child)) && visited.add(child)) {
+              if (pIsRelevantEdge.test(parent, child) && visited.add(child)) {
                 waitlist.offer(child);
               }
             }
@@ -1111,18 +1115,58 @@ class WitnessWriter implements EdgeAppender {
     };
   }
 
-  public void writePath(
+  /**
+   * Creates a {@link Witness} using the supplied parameters and appends this witness as GraphML to
+   * the supplied {@link Appendable}.
+   *
+   * @return the created {@link Witness}
+   */
+  public Witness writePath(
       Appendable pTarget,
       final ARGState pRootState,
       final Predicate<? super ARGState> pIsRelevantState,
-      final Predicate<? super Pair<ARGState, ARGState>> pIsRelevantEdge,
+      final BiPredicate<ARGState, ARGState> pIsRelevantEdge,
       final Predicate<? super ARGState> pIsCyclehead,
       final Optional<Function<? super ARGState, ExpressionTree<Object>>> cycleHeadToQuasiInvariant,
       Optional<CounterexampleInfo> pCounterExample,
       GraphBuilder pGraphBuilder)
       throws IOException {
+    Witness witness =
+        produceWitness(
+            pRootState,
+            pIsRelevantState,
+            pIsRelevantEdge,
+            pIsCyclehead,
+            cycleHeadToQuasiInvariant,
+            pCounterExample,
+            pGraphBuilder);
+    WitnessToOutputFormatsUtils.writeToGraphMl(witness,pTarget);
+    return witness;
+  }
 
-    Predicate<? super Pair<ARGState, ARGState>> isRelevantEdge = pIsRelevantEdge;
+  /** Creates a {@link Witness} using the supplied parameters */
+  public Witness produceWitness(
+      final ARGState pRootState,
+      final Predicate<? super ARGState> pIsRelevantState,
+      final BiPredicate<ARGState, ARGState> pIsRelevantEdge,
+      final Predicate<? super ARGState> pIsCyclehead,
+      final Optional<Function<? super ARGState, ExpressionTree<Object>>> cycleHeadToQuasiInvariant,
+      Optional<CounterexampleInfo> pCounterExample,
+      GraphBuilder pGraphBuilder) {
+
+    // reset information in case data structures where filled before:
+    leavingEdges.clear();
+    enteringEdges.clear();
+    nodeFlags.clear();
+    violatedProperties.clear();
+    stateInvariants.clear();
+    stateQuasiInvariants.clear();
+    stateScopes.clear();
+    invariantExportStates.clear();
+    stateToARGStates.clear();
+    edgeToCFAEdges.clear();
+
+    BiPredicate<ARGState, ARGState> isRelevantEdge = pIsRelevantEdge;
     Multimap<ARGState, CFAEdgeWithAssumptions> valueMap = ImmutableMultimap.of();
     Map<ARGState, CFAEdgeWithAdditionalInfo> additionalInfo = getAdditionalInfo(pCounterExample);
     additionalInfoConverters = getAdditionalInfoConverters(pCounterExample);
@@ -1134,14 +1178,14 @@ class WitnessWriter implements EdgeAppender {
                 pCounterExample.get().getExactVariableValues(),
                 ASSUMPTION_FILTER);
       } else {
-        isRelevantEdge = edge -> pIsRelevantState.apply(edge.getFirst()) && pIsRelevantState.apply(edge.getSecond());
+        isRelevantEdge = BiPredicates.bothSatisfy(pIsRelevantState);
       }
     }
 
     final String entryStateNodeId = pGraphBuilder.getId(pRootState);
 
     // Collect node flags in advance
-    for (ARGState s : collectPathNodes(pRootState, ARGState::getChildren, pIsRelevantState, isRelevantEdge)) {
+    for (ARGState s : collectReachableNodes(pRootState, ARGState::getChildren, pIsRelevantState, isRelevantEdge)) {
       String sourceStateNodeId = pGraphBuilder.getId(s);
       EnumSet<NodeFlag> sourceNodeFlags = EnumSet.noneOf(NodeFlag.class);
       if (sourceStateNodeId.equals(entryStateNodeId)) {
@@ -1169,39 +1213,48 @@ class WitnessWriter implements EdgeAppender {
         isRelevantEdge,
         valueMap,
         additionalInfo,
-        collectPathEdges(pRootState, ARGState::getChildren, pIsRelevantState, isRelevantEdge),
+        collectReachableEdges(pRootState, ARGState::getChildren, pIsRelevantState, isRelevantEdge),
         this);
 
     // remove unnecessary edges leading to sink
     removeUnnecessarySinkEdges();
 
     // Merge nodes with empty or repeated edges
-    TreeSet<Edge> waitlist = new TreeSet<>(leavingEdges.values());
+    NavigableSet<Edge> waitlist = new TreeSet<>(leavingEdges.values());
     while (!waitlist.isEmpty()) {
       Edge edge = waitlist.pollFirst();
-      // If the edge still exists in the graph and is redundant, remove it
-      if (leavingEdges.get(edge.getSource()).contains(edge) && isEdgeRedundant.apply(edge)) {
+      // If the edge still exists in the graph and is irrelevant, remove it
+      if (leavingEdges.get(edge.getSource()).contains(edge) && isEdgeIrrelevant.apply(edge)) {
         Iterables.addAll(waitlist, mergeNodes(edge));
         assert leavingEdges.isEmpty() || leavingEdges.containsKey(entryStateNodeId);
       }
+      setLoopHeadInvariantIfApplicable(edge.getTarget());
     }
 
     // merge redundant sibling edges leading to the sink together, if possible
     mergeRedundantSinkEdges();
 
-    // Write elements
-    final GraphMlBuilder doc;
-    try {
-      doc = new GraphMlBuilder(graphType, defaultSourcefileName, cfa, verificationTaskMetaData);
-    } catch (ParserConfigurationException e) {
-      throw new IOException(e);
-    }
-    writeElementsOfGraphToDoc(doc, entryStateNodeId);
-    doc.appendTo(pTarget);
+    return new Witness(
+        graphType,
+        defaultSourcefileName,
+        cfa,
+        verificationTaskMetaData,
+        entryStateNodeId,
+        leavingEdges,
+        enteringEdges,
+        witnessOptions,
+        nodeFlags,
+        violatedProperties,
+        stateInvariants,
+        stateQuasiInvariants,
+        stateScopes,
+        invariantExportStates,
+        stateToARGStates,
+        edgeToCFAEdges);
   }
 
   /**
-   * Getter for additional information. Overwritten at {@link ExtendedWitnessWriter}
+   * Getter for additional information. Overwritten at {@link ExtendedWitnessFactory}
    *
    * @param pCounterExample current {@link CounterexampleInfo}
    * @return additional information
@@ -1212,7 +1265,7 @@ class WitnessWriter implements EdgeAppender {
   }
 
   /**
-   * Getter of {@link AdditionalInfoConverter}. Overwritten at {@link ExtendedWitnessWriter}
+   * Getter of {@link AdditionalInfoConverter}. Overwritten at {@link ExtendedWitnessFactory}
    *
    * @param pCounterExample current {@link CounterexampleInfo}
    * @return set of InfoConverters
@@ -1225,7 +1278,7 @@ class WitnessWriter implements EdgeAppender {
   /** Remove edges that lead to the sink but have a sibling edge that has the same label.
    *
    * <p>
-   * We additionally remove redundant edges.
+   * We additionally remove irrelevant edges.
    * This is needed for concurrency witnesses at thread-creation.
    * </p>
    */
@@ -1237,8 +1290,8 @@ class WitnessWriter implements EdgeAppender {
           for (Edge otherEdge : leavingEdgesCollection) {
             // ignore the edge itself, as well as already handled edges.
             if (edge != otherEdge && !toRemove.contains(otherEdge)) {
-              // remove edges with either identical labels or redundant edge-transition
-              if (edge.getLabel().equals(otherEdge.getLabel()) || isEdgeRedundant.apply(edge)) {
+              // remove edges with either identical labels or irrelevant edge-transition
+              if (edge.getLabel().equals(otherEdge.getLabel()) || isEdgeIrrelevant.apply(edge)) {
                 toRemove.add(edge);
                 break;
               }
@@ -1306,6 +1359,10 @@ class WitnessWriter implements EdgeAppender {
 
               // Add the merged edge to the graph
               putEdge(merged.get());
+              edgeToCFAEdges.putAll(merged.get(), edgeToCFAEdges.get(edge));
+              edgeToCFAEdges.putAll(merged.get(), edgeToCFAEdges.get(other));
+              edgeToCFAEdges.removeAll(edge);
+              edgeToCFAEdges.removeAll(other);
 
               // Add the merged edge to the set of siblings to consider it for further merges
               edgeToSinkIterator.add(merged.get());
@@ -1317,31 +1374,6 @@ class WitnessWriter implements EdgeAppender {
     }
   }
 
-  private void writeElementsOfGraphToDoc(GraphMlBuilder doc, String entryStateNodeId) {
-    Map<String, Element> nodes = new HashMap<>();
-    Deque<String> waitlist = new ArrayDeque<>();
-    waitlist.push(entryStateNodeId);
-    Element entryNode = createNewNode(doc, entryStateNodeId);
-    addInvariantsData(doc, entryNode, entryStateNodeId);
-    nodes.put(entryStateNodeId, entryNode);
-    while (!waitlist.isEmpty()) {
-      String source = waitlist.pop();
-      for (Edge edge : leavingEdges.get(source)) {
-        setLoopHeadInvariantIfApplicable(edge.getTarget());
-
-        Element targetNode = nodes.get(edge.getTarget());
-        if (targetNode == null) {
-          targetNode = createNewNode(doc, edge.getTarget());
-          if (!ExpressionTrees.getFalse()
-              .equals(addInvariantsData(doc, targetNode, edge.getTarget()))) {
-            waitlist.push(edge.getTarget());
-          }
-          nodes.put(edge.getTarget(), targetNode);
-        }
-        createNewEdge(doc, edge, targetNode);
-      }
-    }
-  }
 
   private void setLoopHeadInvariantIfApplicable(String pTarget) {
     if (!ExpressionTrees.getTrue().equals(getStateInvariant(pTarget))) {
@@ -1374,31 +1406,19 @@ class WitnessWriter implements EdgeAppender {
     }
     stateInvariants.put(pTarget, loopHeadInvariant);
     if (scope != null) {
-      stateScopes.put(pTarget, scope);
+      getStateScopes().put(pTarget, scope);
     }
-  }
-
-  private ExpressionTree<Object> addInvariantsData(
-      GraphMlBuilder pDoc, Element pNode, String pStateId) {
-    if (!invariantExportStates.contains(pStateId)) {
-      return ExpressionTrees.getTrue();
-    }
-    ExpressionTree<Object> tree = getStateInvariant(pStateId);
-    if (!tree.equals(ExpressionTrees.getTrue())) {
-      pDoc.addDataElementChild(pNode, KeyDef.INVARIANT, tree.toString());
-      String scope = stateScopes.get(pStateId);
-      if (scope != null && !scope.isEmpty() && !tree.equals(ExpressionTrees.getFalse())) {
-        pDoc.addDataElementChild(pNode, KeyDef.INVARIANTSCOPE, scope);
-      }
-    }
-    return tree;
   }
 
   private boolean hasFlagsOrProperties(String pNode) {
     return !nodeFlags.get(pNode).isEmpty() || !violatedProperties.get(pNode).isEmpty();
   }
 
-  private final Predicate<String> isNodeRedundant =
+  /**
+   * this predicate marks intermediate nodes that do not contain relevant information and can
+   * therefore be shortcut.
+   */
+  private final Predicate<String> isIrrelevantNode =
       new Predicate<String>() {
 
         @Override
@@ -1421,12 +1441,16 @@ class WitnessWriter implements EdgeAppender {
         }
       };
 
-  private final Predicate<Edge> isEdgeRedundant =
+  /**
+   * this predicate marks intermediate edges that do not contain relevant information and can
+   * therefore be shortcut.
+   */
+  private final Predicate<Edge> isEdgeIrrelevant =
       new Predicate<Edge>() {
 
         @Override
         public boolean apply(final Edge pEdge) {
-          if (isNodeRedundant.apply(pEdge.getTarget())) {
+          if (isIrrelevantNode.apply(pEdge.getTarget())) {
             return true;
           }
 
@@ -1446,7 +1470,7 @@ class WitnessWriter implements EdgeAppender {
             return false;
           }
 
-          // An edge is never redundant if there are conflicting scopes
+          // An edge is never irrelevant if there are conflicting scopes
           ExpressionTree<Object> sourceTree = getStateInvariant(pEdge.getSource());
           if (sourceTree != null) {
             String sourceScope = stateScopes.get(pEdge.getSource());
@@ -1456,7 +1480,7 @@ class WitnessWriter implements EdgeAppender {
             }
           }
 
-          // An edge is redundant if it is the only leaving edge of a
+          // An edge is irrelevant if it is the only leaving edge of a
           // node and it is empty or all its non-assumption contents
           // are summarized by a preceding edge
           boolean summarizedByPreceedingEdge =
@@ -1489,11 +1513,11 @@ class WitnessWriter implements EdgeAppender {
       };
 
   /**
-   * Merge two consecutive nodes into one new node, if the edge between the nodes is redundant. The
+   * Merge two consecutive nodes into one new node, if the edge between the nodes is irrelevant. The
    * merge also merges the information of the nodes, e.g. disjuncts their invariants.
    */
   private Iterable<Edge> mergeNodes(final Edge pEdge) {
-    Preconditions.checkArgument(isEdgeRedundant.apply(pEdge));
+    Preconditions.checkArgument(isEdgeIrrelevant.apply(pEdge));
 
     // Always merge into the predecessor, unless the successor is the sink
     boolean intoPredecessor =
@@ -1522,6 +1546,9 @@ class WitnessWriter implements EdgeAppender {
     // Merge the violated properties
     violatedProperties.putAll(nodeToKeep, violatedProperties.removeAll(nodeToRemove));
 
+    // Merge mapping
+    stateToARGStates.putAll(nodeToKeep, stateToARGStates.removeAll(nodeToRemove));
+
     Set<Edge> replacementEdges = new HashSet<>();
 
     // Move the leaving edges
@@ -1543,6 +1570,8 @@ class WitnessWriter implements EdgeAppender {
         label = label.putAllAndCopy(leavingEdge.getLabel());
         Edge replacementEdge = new Edge(nodeToKeep, leavingEdge.getTarget(), label);
         putEdge(replacementEdge);
+        edgeToCFAEdges.putAll(replacementEdge, edgeToCFAEdges.get(leavingEdge));
+        edgeToCFAEdges.removeAll(leavingEdge);
         replacementEdges.add(replacementEdge);
         CFANode loopHead = loopHeadEnteringEdges.get(leavingEdge);
         if (loopHead != null) {
@@ -1554,6 +1583,7 @@ class WitnessWriter implements EdgeAppender {
     // Remove the old edges from their successors
     for (Edge leavingEdge : leavingEdgesToMove) {
       boolean removed = removeEdge(leavingEdge);
+      edgeToCFAEdges.removeAll(leavingEdge);
       assert removed;
     }
 
@@ -1567,6 +1597,7 @@ class WitnessWriter implements EdgeAppender {
         TransitionCondition label = pEdge.getLabel().putAllAndCopy(enteringEdge.getLabel());
         Edge replacementEdge = new Edge(enteringEdge.getSource(), nodeToKeep, label);
         putEdge(replacementEdge);
+        edgeToCFAEdges.putAll(replacementEdge, edgeToCFAEdges.get(pEdge));
         replacementEdges.add(replacementEdge);
         CFANode loopHead = loopHeadEnteringEdges.get(enteringEdge);
         if (loopHead != null) {
@@ -1575,11 +1606,14 @@ class WitnessWriter implements EdgeAppender {
         }
       }
     }
+
     // Remove the old edges from their predecessors
     for (Edge enteringEdge : enteringEdgesToMove) {
       boolean removed = removeEdge(enteringEdge);
+      edgeToCFAEdges.removeAll(enteringEdge);
       assert removed : "could not remove edge: " + enteringEdge;
     }
+    edgeToCFAEdges.removeAll(pEdge);
 
     return replacementEdges;
   }
@@ -1616,10 +1650,10 @@ class WitnessWriter implements EdgeAppender {
     ExpressionTree<Object> newTree = mergeStateInvariantsIntoFirst(source, target);
     if (newTree != null) {
       if (newScope == null && !ExpressionTrees.isConstant(newTree)) {
-        putStateInvariant(source, ExpressionTrees.getTrue());
+        addToStateInvariant(source, ExpressionTrees.getTrue());
         stateScopes.remove(source);
       } else {
-        stateScopes.put(source, newScope);
+        stateScopes.put(source, nullToEmpty(newScope));
       }
     }
   }
@@ -1634,13 +1668,6 @@ class WitnessWriter implements EdgeAppender {
     }
   }
 
-  private ExpressionTree<Object> getQuasiInvariant(final String pNodeId) {
-    ExpressionTree<Object> result = stateQuasiInvariants.get(pNodeId);
-    if (result == null) {
-      return ExpressionTrees.getFalse();
-    }
-    return result;
-  }
 
   private void putEdge(Edge pEdge) {
     assert leavingEdges.size() == enteringEdges.size();
@@ -1665,43 +1692,6 @@ class WitnessWriter implements EdgeAppender {
     return false;
   }
 
-  private Element createNewEdge(GraphMlBuilder pDoc, Edge pEdge, Element pTargetNode) {
-    Element edge = pDoc.createEdgeElement(pEdge.getSource(), pEdge.getTarget());
-    for (Map.Entry<KeyDef, String> entry : pEdge.getLabel().getMapping().entrySet()) {
-      KeyDef keyDef = entry.getKey();
-      String value = entry.getValue();
-      if (keyDef.keyFor.equals(ElementType.EDGE)) {
-        pDoc.addDataElementChild(edge, keyDef, value);
-      } else if (keyDef.keyFor.equals(ElementType.NODE)) {
-        pDoc.addDataElementChild(pTargetNode, keyDef, value);
-      }
-    }
-    return edge;
-  }
-
-  private Element createNewNode(GraphMlBuilder pDoc, String pEntryStateNodeId) {
-    Element result = pDoc.createNodeElement(pEntryStateNodeId, NodeType.ONPATH);
-
-    if (witnessOptions.exportNodeLabel()) {
-      // add a printable label that for example is shown in yEd
-      pDoc.addDataElementChild(result, KeyDef.LABEL, pEntryStateNodeId);
-    }
-
-    for (NodeFlag f : nodeFlags.get(pEntryStateNodeId)) {
-      pDoc.addDataElementChild(result, f.key, "true");
-    }
-    for (Property violation : violatedProperties.get(pEntryStateNodeId)) {
-      pDoc.addDataElementChild(result, KeyDef.VIOLATEDPROPERTY, violation.toString());
-    }
-
-    if(stateQuasiInvariants.containsKey(pEntryStateNodeId)) {
-      ExpressionTree<Object> tree = getQuasiInvariant(pEntryStateNodeId);
-        pDoc.addDataElementChild(result, KeyDef.INVARIANT, tree.toString());
-    }
-
-    return result;
-  }
-
   private Collection<NodeFlag> extractNodeFlags(ARGState pState) {
     if (pState.isTarget() && graphType != WitnessType.CORRECTNESS_WITNESS) {
       return Collections.singleton(NodeFlag.ISVIOLATION);
@@ -1710,7 +1700,7 @@ class WitnessWriter implements EdgeAppender {
   }
 
   private Collection<Property> extractViolatedProperties(ARGState pState) {
-    ArrayList<Property> result = new ArrayList<>();
+    List<Property> result = new ArrayList<>();
     if (pState.isTarget()) {
       result.addAll(pState.getViolatedProperties());
     }
@@ -1728,7 +1718,7 @@ class WitnessWriter implements EdgeAppender {
    * @param pStateId the state id.
    * @param pValue the invariant to be added.
    */
-  private void putStateInvariant(String pStateId, ExpressionTree<Object> pValue) {
+  private void addToStateInvariant(String pStateId, ExpressionTree<Object> pValue) {
     ExpressionTree<Object> prev = stateInvariants.get(pStateId);
     if (prev == null) {
       stateInvariants.put(pStateId, simplifier.simplify(pValue));
@@ -1750,25 +1740,19 @@ class WitnessWriter implements EdgeAppender {
       String pStateId, String pOtherStateId) {
     ExpressionTree<Object> prev = stateInvariants.get(pStateId);
     ExpressionTree<Object> other = stateInvariants.get(pOtherStateId);
-    if (prev == null) {
-      stateInvariants.put(pStateId, other);
-      return other;
-    }
-    if (other == null) {
-      return prev;
+    if (prev == null && other == null) {
+      stateInvariants.put(pStateId, ExpressionTrees.getTrue());
+      return ExpressionTrees.getTrue();
+    } else if (prev == null || other == null) {
+      ExpressionTree<Object> existingTree = (prev == null) ? other : prev;
+      stateInvariants.put(pStateId, existingTree);
+      return existingTree;
     }
     ExpressionTree<Object> result = simplifier.simplify(factory.or(prev, other));
     stateInvariants.put(pStateId, result);
     return result;
   }
 
-  private ExpressionTree<Object> getStateInvariant(String pStateId) {
-    ExpressionTree<Object> result = stateInvariants.get(pStateId);
-    if (result == null) {
-      return ExpressionTrees.getTrue();
-    }
-    return result;
-  }
 
   private boolean exportInvariant(CFAEdge pEdge, Optional<Collection<ARGState>> pFromState) {
     if (pFromState.isPresent()
@@ -1984,5 +1968,25 @@ class WitnessWriter implements EdgeAppender {
       return ambiguousName;
     }
     return pQualifier.get() + "::" + pDeclaration.getOrigName();
+  }
+
+  private ExpressionTree<Object> getStateInvariant(String pStateId) {
+    ExpressionTree<Object> result = stateInvariants.get(pStateId);
+    if (result == null) {
+      return ExpressionTrees.getTrue();
+    }
+    return result;
+  }
+
+  private ExpressionTree<Object> getQuasiInvariant(final String pNodeId) {
+    ExpressionTree<Object> result = stateQuasiInvariants.get(pNodeId);
+    if (result == null) {
+      return ExpressionTrees.getFalse();
+    }
+    return result;
+  }
+
+  private Map<String, String> getStateScopes() {
+    return stateScopes;
   }
 }

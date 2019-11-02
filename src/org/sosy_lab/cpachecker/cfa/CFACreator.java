@@ -193,6 +193,13 @@ public class CFACreator {
   @FileOption(FileOption.Type.OUTPUT_FILE)
   private Path exportFunctionCallsFile = Paths.get("functionCalls.dot");
 
+  @Option(
+      secure = true,
+      name = "cfa.callgraph.fileUsed",
+      description = "file name for call graph as .dot file")
+  @FileOption(FileOption.Type.OUTPUT_FILE)
+  private Path exportFunctionCallsUsedFile = Paths.get("functionCallsUsed.dot");
+
   @Option(secure=true, name="cfa.file",
       description="export CFA as .dot file")
   @FileOption(FileOption.Type.OUTPUT_FILE)
@@ -356,8 +363,9 @@ public class CFACreator {
       parser = Parsers.getJavaParser(logger, config);
       break;
     case C:
-      CParser outerParser =
-          CParser.Factory.getParser(logger, CParser.Factory.getOptions(config), machineModel);
+        CParser outerParser =
+            CParser.Factory.getParser(
+                logger, CParser.Factory.getOptions(config), machineModel, shutdownNotifier);
 
       outerParser =
           new CParserWithLocationMapper(
@@ -578,6 +586,7 @@ public class CFACreator {
 
     if (((exportCfaFile != null) && (exportCfa || exportCfaPerFunction))
         || ((exportFunctionCallsFile != null) && exportFunctionCalls)
+        || ((exportFunctionCallsUsedFile != null) && exportFunctionCalls)
         || ((serializeCfaFile != null) && serializeCfa)
         || (exportCfaPixelFile != null)
         || (exportCfaToCFile != null && exportCfaToC)) {
@@ -608,7 +617,8 @@ public class CFACreator {
    * This method parses the program from the String and builds a CFA for each function. The
    * ParseResult is only a Wrapper for the CFAs of the functions and global declarations.
    */
-  private ParseResult parseToCFAs(final String program) throws ParserException {
+  private ParseResult parseToCFAs(final String program)
+      throws ParserException, InterruptedException {
     final ParseResult parseResult;
 
     parseResult = parser.parseString("test", program);
@@ -1019,7 +1029,17 @@ v.addInitializer(initializer);
 
     if (exportFunctionCalls && exportFunctionCallsFile != null) {
       try (Writer w = IO.openOutputFile(exportFunctionCallsFile, Charset.defaultCharset())) {
-        FunctionCallDumper.dump(w, cfa);
+        FunctionCallDumper.dump(w, cfa, false);
+      } catch (IOException e) {
+        logger.logUserException(Level.WARNING, e,
+            "Could not write functionCalls to dot file");
+        // continue with analysis
+      }
+    }
+
+    if (exportFunctionCalls && exportFunctionCallsUsedFile != null) {
+      try (Writer w = IO.openOutputFile(exportFunctionCallsUsedFile, Charset.defaultCharset())) {
+        FunctionCallDumper.dump(w, cfa, true);
       } catch (IOException e) {
         logger.logUserException(Level.WARNING, e,
             "Could not write functionCalls to dot file");

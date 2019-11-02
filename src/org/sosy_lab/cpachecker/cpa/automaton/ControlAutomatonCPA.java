@@ -34,6 +34,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.logging.Level;
+import org.sosy_lab.common.ShutdownNotifier;
 import org.sosy_lab.common.configuration.Configuration;
 import org.sosy_lab.common.configuration.FileOption;
 import org.sosy_lab.common.configuration.InvalidConfigurationException;
@@ -133,22 +134,28 @@ public class ControlAutomatonCPA
   private boolean topOnFinalSelfLoopingState = false;
 
   private final Automaton automaton;
-  private final AutomatonState topState = new AutomatonState.TOP(this);
-  private final AutomatonState bottomState = new AutomatonState.BOTTOM(this);
+  private final AutomatonState topState;
+  private final AutomatonState bottomState;
 
-  private final AbstractDomain automatonDomain = new FlatLatticeDomain(topState);
-  final AutomatonStatistics stats = new AutomatonStatistics(this);
+  private final AbstractDomain automatonDomain;
+  private final AutomatonStatistics stats;
   private final CFA cfa;
   private final LogManager logger;
+  private final ShutdownNotifier shutdownNotifier;
 
-  protected ControlAutomatonCPA(@OptionalAnnotation Automaton pAutomaton,
-      Configuration pConfig, LogManager pLogger, CFA pCFA)
-    throws InvalidConfigurationException {
+  protected ControlAutomatonCPA(
+      @OptionalAnnotation Automaton pAutomaton,
+      Configuration pConfig,
+      LogManager pLogger,
+      CFA pCFA,
+      ShutdownNotifier pShutdownNotifier)
+      throws InvalidConfigurationException {
 
     pConfig.inject(this, ControlAutomatonCPA.class);
 
     cfa = pCFA;
     logger = pLogger;
+    shutdownNotifier = pShutdownNotifier;
     if (pAutomaton != null) {
       this.automaton = pAutomaton;
 
@@ -160,6 +167,12 @@ public class ControlAutomatonCPA
     }
 
     pLogger.log(Level.FINEST, "Automaton", automaton.getName(), "loaded.");
+
+    topState = new AutomatonState.TOP(getAutomaton(), isTreatingErrorsAsTargets());
+    bottomState = new AutomatonState.BOTTOM(getAutomaton(), isTreatingErrorsAsTargets());
+
+    automatonDomain = new FlatLatticeDomain(topState);
+    stats = new AutomatonStatistics(automaton);
 
     if (export) {
       if (dotExportFile != null) {
@@ -189,7 +202,15 @@ public class ControlAutomatonCPA
         ? new CProgramScope(cfa, logger)
         : DummyScope.getInstance();
 
-    List<Automaton> lst = AutomatonParser.parseAutomatonFile(pFile, pConfig, logger, cfa.getMachineModel(), scope, cfa.getLanguage());
+    List<Automaton> lst =
+        AutomatonParser.parseAutomatonFile(
+            pFile,
+            pConfig,
+            logger,
+            cfa.getMachineModel(),
+            scope,
+            cfa.getLanguage(),
+            shutdownNotifier);
 
     if (lst.isEmpty()) {
       throw new InvalidConfigurationException("Could not find automata in the file " + inputFile.toAbsolutePath());
@@ -242,10 +263,11 @@ public class ControlAutomatonCPA
     return AutomatonState.automatonStateFactory(
         pAutomaton.getInitialVariables(),
         pAutomaton.getInitialState(),
-        this,
+        pAutomaton,
         0,
         0,
-        safetyProp);
+        safetyProp,
+        isTreatingErrorsAsTargets());
   }
 
   @Override
@@ -279,7 +301,7 @@ public class ControlAutomatonCPA
 
   @Override
   public AutomatonTransferRelation getTransferRelation() {
-    return new AutomatonTransferRelation(this, logger, cfa.getMachineModel());
+    return new AutomatonTransferRelation(this, logger, cfa.getMachineModel(), stats);
   }
 
   public AutomatonState getBottomState() {

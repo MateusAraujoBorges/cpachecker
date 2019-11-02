@@ -50,6 +50,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
@@ -223,7 +224,7 @@ public class KInductionInvariantGenerator extends AbstractInvariantGenerator
       final ReachedSetFactory pReachedSetFactory,
       final TargetLocationProvider pTargetLocationProvider,
       final AggregatedReachedSets pAggregatedReachedSets)
-      throws InvalidConfigurationException, CPAException {
+      throws InvalidConfigurationException, CPAException, InterruptedException {
 
     KInductionInvariantGeneratorOptions options = new KInductionInvariantGeneratorOptions();
     pConfig.inject(options);
@@ -256,7 +257,7 @@ public class KInductionInvariantGenerator extends AbstractInvariantGenerator
       final ReachedSetFactory pReachedSetFactory,
       CandidateGenerator candidateGenerator,
       boolean pAsync)
-      throws InvalidConfigurationException, CPAException {
+      throws InvalidConfigurationException, CPAException, InterruptedException {
 
     return new KInductionInvariantGenerator(
         pConfig,
@@ -280,7 +281,7 @@ public class KInductionInvariantGenerator extends AbstractInvariantGenerator
       final boolean pAsync,
       final CandidateGenerator pCandidateGenerator,
       final AggregatedReachedSets pAggregatedReachedSets)
-      throws InvalidConfigurationException, CPAException {
+      throws InvalidConfigurationException, CPAException, InterruptedException {
     logger = pLogger;
     shutdownManager = pShutdownNotifier;
 
@@ -502,13 +503,14 @@ public class KInductionInvariantGenerator extends AbstractInvariantGenerator
       final ShutdownManager pShutdownManager,
       TargetLocationProvider pTargetLocationProvider,
       Specification pSpecification)
-      throws InvalidConfigurationException, CPAException {
+      throws InvalidConfigurationException, CPAException, InterruptedException {
 
     final Set<CandidateInvariant> candidates = new LinkedHashSet<>();
 
-    for (CandidateInvariant candidate : pOptions.guessCandidatesFromCFA.create(pCFA, pSpecification, pTargetLocationProvider, pLogger)) {
-      candidates.add(candidate);
-    }
+    Iterables.addAll(
+        candidates,
+        pOptions.guessCandidatesFromCFA.create(
+            pCFA, pSpecification, pTargetLocationProvider, pLogger));
 
     final Multimap<String, CFANode> candidateGroupLocations = HashMultimap.create();
     if (pOptions.invariantsAutomatonFile != null) {
@@ -852,7 +854,7 @@ public class KInductionInvariantGenerator extends AbstractInvariantGenerator
                     varClassification.getAssumedVariables().elementSet(),
                     varClassification.getIntAddVars()));
         Map<String, CIdExpression> idExpressions = new LinkedHashMap<>();
-        TreeSet<BigInteger> constants = new TreeSet<>();
+        NavigableSet<BigInteger> constants = new TreeSet<>();
         Multimap<CType, String> typePartitions = LinkedHashMultimap.create();
         Map<CIdExpression, String> functions = new HashMap<>();
         for (String var : vars) {
