@@ -136,15 +136,18 @@ public class FormulaManagerView {
   private final FormulaManager manager;
   private final FormulaWrappingHandler wrappingHandler;
   private final BooleanFormulaManagerView booleanFormulaManager;
-  private @Nullable BitvectorFormulaManagerView bitvectorFormulaManager; // lazy initialization
-  private @Nullable FloatingPointFormulaManagerView floatingPointFormulaManager; // lazy initialization
-  private @Nullable IntegerFormulaManagerView integerFormulaManager; // lazy initialization
-  private @Nullable RationalFormulaManagerView rationalFormulaManager; // lazy initialization
   private final FunctionFormulaManagerView functionFormulaManager;
-  private @Nullable QuantifiedFormulaManagerView quantifiedFormulaManager; // lazy initialization
-  private @Nullable ArrayFormulaManagerView arrayFormulaManager; // lazy initialization
   private final ReplaceBitvectorEncodingOptions bvOptions;
   private final ReplaceIntegerEncodingOptions intOptions;
+
+  // other formula managers use lazy initialization, because some solvers do not support them.
+  private @Nullable BitvectorFormulaManagerView bitvectorFormulaManager;
+  private @Nullable FloatingPointFormulaManagerView floatingPointFormulaManager;
+  private @Nullable IntegerFormulaManagerView integerFormulaManager;
+  private @Nullable RationalFormulaManagerView rationalFormulaManager;
+  private @Nullable QuantifiedFormulaManagerView quantifiedFormulaManager;
+  private @Nullable ArrayFormulaManagerView arrayFormulaManager;
+  private @Nullable SLFormulaManagerView slFormulaManager;
 
   @Option(secure=true, name = "formulaDumpFilePattern", description = "where to dump interpolation and abstraction problems (format string)")
   @FileOption(FileOption.Type.OUTPUT_FILE)
@@ -329,7 +332,7 @@ public class FormulaManagerView {
     switch (encodeIntegerAs) {
       case BITVECTOR:
         return new ReplaceIntegerWithBitvectorTheory(
-            wrappingHandler, bitvectorFormulaManager, booleanFormulaManager, pIntegerOptions);
+            wrappingHandler, getBitvectorFormulaManager(), booleanFormulaManager, pIntegerOptions);
       case INTEGER:
         return manager.getIntegerFormulaManager();
       case RATIONAL:
@@ -1021,6 +1024,13 @@ public class FormulaManagerView {
     return arrayFormulaManager;
   }
 
+  public SLFormulaManagerView getSLFormulaManager() {
+    if (slFormulaManager == null) {
+      slFormulaManager = new SLFormulaManagerView(wrappingHandler, manager.getSLFormulaManager());
+    }
+    return slFormulaManager;
+  }
+
   public <T extends Formula> FormulaType<T> getFormulaType(T pFormula) {
     return wrappingHandler.getFormulaType(pFormula);
   }
@@ -1184,7 +1194,7 @@ public class FormulaManagerView {
     // Add the formula to the work queue
     toProcess.push(pFormula);
 
-    FormulaVisitor<Void> process = new FormulaVisitor<Void>() {
+    FormulaVisitor<Void> process = new FormulaVisitor<>() {
       // This visitor works with unwrapped formulas.
       // After calls to other methods that might return wrapped formulas we need to unwrap them.
 
@@ -1471,7 +1481,7 @@ public class FormulaManagerView {
 
   public boolean isPurelyConjunctive(BooleanFormula t) {
     final BooleanFormulaVisitor<Boolean> isAtomicVisitor =
-        new DefaultBooleanFormulaVisitor<Boolean>() {
+        new DefaultBooleanFormulaVisitor<>() {
           @Override protected Boolean visitDefault() {
             return false;
           }
@@ -1634,7 +1644,7 @@ public class FormulaManagerView {
         return true;
       }
     } else {
-      if (idx.getAsInt() != ssa.getIndex(name)) {
+      if (idx.orElseThrow() != ssa.getIndex(name)) {
         return true;
       }
     }
