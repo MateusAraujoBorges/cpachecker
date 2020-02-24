@@ -23,7 +23,6 @@
  */
 package org.sosy_lab.cpachecker.cfa;
 
-import alearis.malebolge.cpa.edge.VerifierAssumeEdge;
 import com.google.common.collect.ImmutableSet;
 import java.util.List;
 import java.util.Set;
@@ -166,7 +165,7 @@ public class CFASecondPassBuilder {
       // Control flow merging directly after two function calls.
       // Our CFA structure currently does not support this,
       // so insert a dummy node and a blank edge.
-      CFANode tmp = new CFANode(successorNode.getFunctionName());
+      CFANode tmp = new CFANode(successorNode.getFunction());
       cfa.addNode(tmp);
       CFAEdge tmpEdge = new BlankEdge("", FileLocation.DUMMY, tmp, successorNode, "");
       CFACreationUtils.addEdgeUnconditionallyToCFA(tmpEdge);
@@ -325,11 +324,11 @@ public class CFASecondPassBuilder {
                                                       BinaryOperator.NOT_EQUALS);
     }
 
-    AssumeEdge trueEdge = new VerifierAssumeEdge(edge.getRawStatement(), edge.getFileLocation(),
+    AssumeEdge trueEdge = new CAssumeEdge(edge.getRawStatement(), edge.getFileLocation(),
         edge.getPredecessor(), edge.getSuccessor(), assumeExp, true);
 
-    CFANode elseNode = new CFATerminationNode(edge.getPredecessor().getFunctionName(), true);
-    AssumeEdge falseEdge = new VerifierAssumeEdge(edge.getRawStatement(), edge.getFileLocation(),
+    CFANode elseNode = new CFATerminationNode(edge.getPredecessor().getFunction());
+    AssumeEdge falseEdge = new CAssumeEdge(edge.getRawStatement(), edge.getFileLocation(),
         edge.getPredecessor(), elseNode, assumeExp, false);
 
     CFACreationUtils.removeEdgeFromNodes(edge);

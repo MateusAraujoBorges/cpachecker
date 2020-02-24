@@ -23,22 +23,17 @@
  */
 package org.sosy_lab.cpachecker.cfa.model;
 
+import org.sosy_lab.cpachecker.cfa.ast.AFunctionDeclaration;
+
 /**
  * A CFANode that marks the end of a path.
  */
 public class CFATerminationNode extends CFANode {
 
   private static final long serialVersionUID = -8328879108494506389L;
-  private final boolean assumptionFailure;
 
-  public CFATerminationNode(String pFunctionName) {
-    super(pFunctionName);
-    assumptionFailure = false;
-  }
-
-  public CFATerminationNode(String pFunctionName, boolean assumptionFailure) {
-    super(pFunctionName);
-    this.assumptionFailure = assumptionFailure;
+  public CFATerminationNode(AFunctionDeclaration pFunction) {
+    super(pFunction);
   }
 
   @Override
@@ -49,9 +44,5 @@ public class CFATerminationNode extends CFANode {
   @Override
   public void addLeavingSummaryEdge(FunctionSummaryEdge pEdge) {
     throw new AssertionError(pEdge);
-  }
-
-  public boolean isAssumptionFailure() {
-    return assumptionFailure;
   }
 }

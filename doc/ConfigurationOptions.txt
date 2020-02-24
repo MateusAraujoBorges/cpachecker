@@ -582,6 +582,10 @@ blockreducer.reductionThreshold = 100
 # parts of the state space (this is similar to CBMC's unwinding assertions).
 bmc.boundingAssertions = true
 
+# If BMC did not find a bug, check which parts of the boundary actually
+# reachableand prevent them from being unrolled any further.
+bmc.boundingAssertionsSlicing = false
+
 # Check reachability of target states after analysis (classical BMC). The
 # alternative is to check the reachability as soon as the target states are
 # discovered, which is done if cpa.predicate.targetStateSatCheck=true.
@@ -822,6 +826,10 @@ counterexample.checker.changeCEXInfo = false
 
 # configuration file for counterexample checks with CPAchecker
 counterexample.checker.config = no default value
+
+# counterexample check should fully replace existing counterexamples with own
+# ones, if available
+counterexample.checker.forceCEXChange = false
 
 # File name where to put the path specification that is generated as input
 # for the counterexample check. A temporary file is used if this is
@@ -1672,6 +1680,10 @@ cpa.loopbound.maxLoopIterations = 0
 # only relevant in combination with a non-static maximum loop iteration
 # adjuster.
 cpa.loopbound.maxLoopIterationsUpperBound = 0
+
+# Only checks for errror after loops were unrolled at least this amount of
+# times.
+cpa.loopbound.startAtBound = 0
 
 # enable stack-based tracking of loops
 cpa.loopbound.trackStack = false
